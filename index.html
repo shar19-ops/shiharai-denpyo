@@ -509,7 +509,6 @@ const EMPLOYEE_CD_BOUNDS = [399.04, 430.56];
 // 収支CD・収支項目名 ボックス（フォーム座標）
 const BALANCE_CD_BOUNDS = [380.80, 398.24];     // 33.28-91.20 (横方向セル, 縦中央は値行で描画)
 const BALANCE_VALUE_BOUNDS = [398.24, 430.88];  // 値行(縦中央配置に使用)
-const BALANCE_CD_X = { x: 38, w: 50 };          // 33.28-91.20
 const BALANCE_NAME_X = { x: 96, w: 92 };        // 91.20-191.68
 
 // ─── 経費CDリスト（ローカル保存・追加/削除可能） ──────────────────
@@ -1100,6 +1099,19 @@ async function generatePDF(withCopy) {
         drawRunsAt(str, x, y, sz * 0.75);
       };
 
+      // セル内に折り返さず単行で描画。幅に収まるよう自動縮小（縦中央配置）
+      const drawInCellShrink = (text, xForm, yTop, yBottom, maxWidth, size) => {
+        if (!text) return;
+        const str = String(text);
+        let sz = size || fs;
+        while (measureForm(str, sz) > maxWidth && sz > 4) sz -= 0.5;
+        const yCenter = (yTop + yBottom) / 2;
+        const baseline = yCenter + sz * 0.35;
+        const x = 0.75 * xForm;
+        const y = yOffset + 419.52 - 0.75 * baseline;
+        drawRunsAt(str, x, y, sz * 0.75);
+      };
+
       // ─ ヘッダー ─
       drawPos('office_name', v('office_name'));
       drawPos('date_year',    v('date_year'));
@@ -1117,7 +1129,7 @@ async function generatePDF(withCopy) {
         drawInCell(gv(`payee_${i}`),      COL_X.payee.x,      yTop, yBottom, COL_X.payee.w);
         drawInCell(toHalfWidthAlnum(gv(`job_${i}`)),      COL_X.job.x,      yTop, yBottom, COL_X.job.w);
         drawInCell(toHalfWidthAlnum(gv(`category_${i}`)), COL_X.category.x, yTop, yBottom, COL_X.category.w);
-        drawInCell(expenseCdLabel(gv(`expense_cd_${i}`)), COL_X.expense_cd.x, yTop, yBottom, COL_X.expense_cd.w);
+        drawInCellShrink(expenseCdLabel(gv(`expense_cd_${i}`)), COL_X.expense_cd.x, yTop, yBottom, COL_X.expense_cd.w);
         drawInCell(gv(`memo_cd_${i}`),    COL_X.memo_cd.x,    yTop, yBottom, COL_X.memo_cd.w);
 
         const amt = parseInt(gv(`amount_${i}`)) || 0;
@@ -1152,7 +1164,7 @@ async function generatePDF(withCopy) {
       draw(v('issuer'), POS.issuer.x, POS.issuer.y, POS.issuer.w, fs + 1);
 
       // ─ 収支CD・収支項目名 ─
-      drawInCell(v('balance_cd'),   BALANCE_CD_X.x,   BALANCE_VALUE_BOUNDS[0], BALANCE_VALUE_BOUNDS[1], BALANCE_CD_X.w);
+      drawCenteredInBox(v('balance_cd'), 33.28, 91.20, BALANCE_VALUE_BOUNDS[0], BALANCE_VALUE_BOUNDS[1]);
       drawInCell(v('balance_name'), BALANCE_NAME_X.x, BALANCE_VALUE_BOUNDS[0], BALANCE_VALUE_BOUNDS[1], BALANCE_NAME_X.w);
 
       // 社員CD：1マスに1文字ずつ、縦中央配置（7セル）
