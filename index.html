@@ -412,7 +412,7 @@ function applyDatePicker(picker, yId, mId, dId) {
 // 一般管理費支払伝票(A5)テンプレートの塗り矩形(グリッド線)を直接解析して取得した座標。
 const POS = {
   office_name:  { x: 638, y:  24, w: 120 },  // 事業所名（"："の後、タイトル行）
-  date_year:    { x: 190, y:  86, w:  48 },  // 年
+  date_year:    { x: 168, y:  86, w:  48 },  // 年
   date_month:   { x: 258, y:  86, w:  34 },  // 月
   date_day:     { x: 313, y:  86, w:  38 },  // 日
   issue_year:   { x:  80, y: 362, w:  50 },  // 発行年
@@ -494,7 +494,7 @@ let expenseCdList = loadExpenseCdList();
 function expenseCdLabel(code) {
   if (!code) return '';
   const item = expenseCdList.find(it => it.code === code);
-  return item ? item.label : code;
+  return item ? `${item.label}${item.code}` : code;
 }
 
 function expenseCdOptionsHtml(selectedValue) {
