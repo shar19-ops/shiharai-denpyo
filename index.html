@@ -300,14 +300,17 @@
       <button type="button" class="btn-calendar" title="カレンダーから選択" onclick="openDatePicker('issue_year','issue_month','issue_day','date_picker_issue')">📅</button>
       <input type="date" id="date_picker_issue" class="date-picker-hidden" onchange="applyDatePicker(this,'issue_year','issue_month','issue_day')">
     </div>
-    <div class="field-grid field-grid-2" style="padding: 0 16px;">
+    <div class="field-grid field-grid-2" style="padding: 0 16px; align-items:end;">
       <div class="field" data-acc>
         <label>収支CD</label>
-        <input type="text" id="balance_cd" placeholder="">
+        <input type="text" id="balance_cd" placeholder="" readonly style="background:#f0f4f8; color:#445;">
       </div>
       <div class="field">
         <label>収支項目名</label>
-        <input type="text" id="balance_name" placeholder="">
+        <div style="display:flex; gap:8px;">
+          <select id="balance_name" onchange="onBalanceNameChange()" style="flex:1;"></select>
+          <button type="button" class="btn-secondary" data-acc style="font-size:12px; padding:0 10px;" onclick="openKessanModal()">📋 項目管理</button>
+        </div>
       </div>
     </div>
     <div class="field-grid field-grid-4" style="padding: 0 16px 16px;">
@@ -340,6 +343,22 @@
   </div>
 
 </div><!-- /container -->
+
+<!-- 収支項目管理モーダル -->
+<div id="kessan-modal" class="modal-overlay" style="display:none">
+  <div class="modal-box">
+    <h2>📋 収支項目管理</h2>
+    <div id="kessan-list" style="max-height:300px; overflow-y:auto; margin-bottom:14px;"></div>
+    <div style="display:flex; gap:8px; margin-bottom:14px;">
+      <input type="text" id="new-kessan-cd" placeholder="収支CD（例：111）" style="width:110px;">
+      <input type="text" id="new-kessan-name" placeholder="収支項目名" style="flex:1;">
+      <button class="btn-login" onclick="addKessan()">追加</button>
+    </div>
+    <div class="modal-btn-row">
+      <button class="btn-cancel" onclick="closeKessanModal()">閉じる</button>
+    </div>
+  </div>
+</div>
 
 <!-- 科目管理モーダル -->
 <div id="account-modal" class="modal-overlay" style="display:none">
@@ -704,6 +723,104 @@ function deleteAccount(idx) {
   renderAccountModalList();
 }
 
+// ─── 収支CD・収支項目名（transfer-slip-appのマスタを反映、ローカル保存で追加/削除可能） ──
+const KESSAN_NAME_MAP = {
+  '111': '売上現金回収高',
+  '112': '未収金回収高',
+  '114': '受取利息',
+  '116': '雑収入',
+  '181': 'その他営業収入',
+  '192': '売上高相殺',
+  '212': '現金仕入高',
+  '213': '工料現金支払',
+  '214': 'その他工事原価',
+  '216': 'その他一般管理費',
+  '218': '未払金、未払費用',
+  '281': 'その他営業支出',
+  '291': '手形支払高',
+};
+const KESSAN_CD_BY_NAME = Object.fromEntries(Object.entries(KESSAN_NAME_MAP).map(([cd, name]) => [name, cd]));
+const KESSAN_NAME_LIST = Object.values(KESSAN_NAME_MAP);
+let KESSAN_EXTRA = [];
+try {
+  const savedKessan = JSON.parse(localStorage.getItem('general_affairs_slip_kessan_extra') || '[]');
+  if (Array.isArray(savedKessan)) KESSAN_EXTRA = savedKessan.filter(e => e && typeof e.cd === 'string' && typeof e.name === 'string');
+} catch (e) {}
+KESSAN_EXTRA.forEach(e => {
+  if (!(e.cd in KESSAN_NAME_MAP)) {
+    KESSAN_NAME_MAP[e.cd] = e.name;
+    KESSAN_CD_BY_NAME[e.name] = e.cd;
+    KESSAN_NAME_LIST.push(e.name);
+  }
+});
+function buildKessanNameOptions() {
+  return '<option value=""></option>' + KESSAN_NAME_LIST.map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('');
+}
+function onBalanceNameChange() {
+  const name = document.getElementById('balance_name').value;
+  document.getElementById('balance_cd').value = KESSAN_CD_BY_NAME[name] || '';
+}
+document.getElementById('balance_name').innerHTML = buildKessanNameOptions();
+
+function openKessanModal() {
+  if (!accMode) { alert('収支項目管理は経理担当者のみ操作できます。\n右上の「経理担当者」からログインしてください。'); return; }
+  renderKessanModalList();
+  document.getElementById('kessan-modal').style.display = 'flex';
+}
+function closeKessanModal() {
+  document.getElementById('kessan-modal').style.display = 'none';
+}
+function renderKessanModalList() {
+  const container = document.getElementById('kessan-list');
+  if (KESSAN_NAME_LIST.length === 0) {
+    container.innerHTML = '<p style="color:#889; font-size:13px;">登録された収支項目はありません</p>';
+    return;
+  }
+  container.innerHTML = KESSAN_NAME_LIST.map((name, idx) => `
+    <div style="display:flex; align-items:center; gap:8px; padding:6px 2px; border-bottom:1px solid #eee;">
+      <span style="flex:1; font-size:14px;">${escapeHtml(name)}　${escapeHtml(KESSAN_CD_BY_NAME[name])}</span>
+      <button class="btn-cancel" style="padding:4px 12px;" onclick="deleteKessan(${idx})">削除</button>
+    </div>
+  `).join('');
+}
+function addKessan() {
+  const cdEl = document.getElementById('new-kessan-cd');
+  const nameEl = document.getElementById('new-kessan-name');
+  const cd = cdEl.value.trim();
+  const name = nameEl.value.trim();
+  if (!cd || !name) { alert('収支CDと収支項目名を両方入力してください'); return; }
+  if (cd in KESSAN_NAME_MAP) { alert('そのCDは既にリストにあります。'); return; }
+  if (KESSAN_NAME_LIST.includes(name)) { alert('その項目名は既にリストにあります。'); return; }
+  KESSAN_NAME_MAP[cd] = name;
+  KESSAN_CD_BY_NAME[name] = cd;
+  KESSAN_NAME_LIST.push(name);
+  KESSAN_EXTRA.push({ cd, name });
+  saveExtraList('general_affairs_slip_kessan_extra', KESSAN_EXTRA);
+  const opt = document.createElement('option');
+  opt.value = name; opt.textContent = name;
+  document.getElementById('balance_name').appendChild(opt);
+  cdEl.value = ''; nameEl.value = '';
+  renderKessanModalList();
+}
+function deleteKessan(idx) {
+  const name = KESSAN_NAME_LIST[idx];
+  const cd = KESSAN_CD_BY_NAME[name];
+  if (!confirm(`「${name}　${cd}」を削除しますか？`)) return;
+  KESSAN_NAME_LIST.splice(idx, 1);
+  delete KESSAN_NAME_MAP[cd];
+  delete KESSAN_CD_BY_NAME[name];
+  const extraIdx = KESSAN_EXTRA.findIndex(e => e.cd === cd);
+  if (extraIdx >= 0) {
+    KESSAN_EXTRA.splice(extraIdx, 1);
+    saveExtraList('general_affairs_slip_kessan_extra', KESSAN_EXTRA);
+  }
+  const sel = document.getElementById('balance_name');
+  if (sel.value === name) { sel.value = ''; onBalanceNameChange(); }
+  const opt = Array.from(sel.options).find(o => o.value === name);
+  if (opt) opt.remove();
+  renderKessanModalList();
+}
+
 // ─── 行生成 ──────────────────────────────────────────────────
 const NUM_ROWS = 7;
 const tbody = document.getElementById('detail-tbody');
@@ -719,10 +836,12 @@ for (let i = 0; i < NUM_ROWS; i++) {
     <td data-acc>
       <select class="tax-select" id="tax_${i}">
         <option value=""></option>
-        <option value="課">課</option>
-        <option value="非">非</option>
-        <option value="不">不</option>
-        <option value="共">共</option>
+        <option value="課込">課込</option>
+        <option value="課抜">課抜</option>
+        <option value="非課税">非課税</option>
+        <option value="不課税">不課税</option>
+        <option value="免税">免税</option>
+        <option value="免抜">免抜</option>
       </select>
     </td>
     <td><input type="text" id="summary_${i}" placeholder=""></td>
@@ -1122,6 +1241,9 @@ document.getElementById('export-modal').addEventListener('click', function(e) {
 });
 document.getElementById('account-modal').addEventListener('click', function(e) {
   if (e.target === this) closeAccountModal();
+});
+document.getElementById('kessan-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeKessanModal();
 });</script>
 </body>
 </html>
