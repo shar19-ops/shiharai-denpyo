@@ -411,15 +411,13 @@ function applyDatePicker(picker, yId, mId, dId) {
 // x_form = x_page/0.75, y_form = (419.52-y_page)/0.75 (y_formは上→下増加)
 // 一般管理費支払伝票(A5)テンプレートの塗り矩形(グリッド線)を直接解析して取得した座標。
 const POS = {
-  office_name:  { x: 425, y:  78, w: 128 },  // 事業所名（枠内、縦中央）
+  office_name:  { x: 638, y:  24, w: 120 },  // 事業所名（"："の後、タイトル行）
   date_year:    { x: 190, y:  86, w:  48 },  // 年
   date_month:   { x: 258, y:  86, w:  34 },  // 月
   date_day:     { x: 313, y:  86, w:  38 },  // 日
-  office_code:  { x: 563, y:  78, w:  58 },  // 事業所CD（箱: 559.52-627.20）
-  voucher_no:   { x: 633, y:  78, w: 122 },  // 伝票番号（箱: 627.20-761.76）
-  issue_year:   { x:  80, y: 378, w:  50 },  // 発行年
-  issue_month:  { x: 135, y: 378, w:  38 },  // 発行月
-  issue_day:    { x: 183, y: 378, w:  38 },  // 発行日
+  issue_year:   { x:  80, y: 362, w:  50 },  // 発行年
+  issue_month:  { x: 135, y: 362, w:  38 },  // 発行月
+  issue_day:    { x: 183, y: 362, w:  38 },  // 発行日
   dept:         { x: 605, y: 384, w:  55 },  // 部
   section:      { x: 695, y: 384, w:  55 },  // 課
   issuer:       { x: 580, y: 423, w: 175 },  // 発行者
@@ -492,6 +490,12 @@ function saveExpenseCdList(list) {
 }
 
 let expenseCdList = loadExpenseCdList();
+
+function expenseCdLabel(code) {
+  if (!code) return '';
+  const item = expenseCdList.find(it => it.code === code);
+  return item ? item.label : code;
+}
 
 function expenseCdOptionsHtml(selectedValue) {
   let html = '<option value=""></option>';
@@ -806,13 +810,29 @@ async function generatePDF(withCopy) {
         drawRunsAt(ch, x, y, sz * 0.75);
       };
 
+      // セル内に水平・垂直ともに中央揃えで描画（単行、自動縮小）
+      const drawCenteredInBox = (text, xLeft, xRight, yTop, yBottom, size) => {
+        if (!text) return;
+        const str = String(text);
+        const maxWidth = (xRight - xLeft) - 4;
+        let sz = size || fs;
+        while (measureForm(str, sz) > maxWidth && sz > 5) sz -= 0.5;
+        const w = measureForm(str, sz);
+        const xForm = xLeft + ((xRight - xLeft) - w) / 2;
+        const yCenter = (yTop + yBottom) / 2;
+        const baseline = yCenter + sz * 0.35;
+        const x = 0.75 * xForm;
+        const y = yOffset + 419.52 - 0.75 * baseline;
+        drawRunsAt(str, x, y, sz * 0.75);
+      };
+
       // ─ ヘッダー ─
-      drawInCell(v('office_name'), POS.office_name.x, 62.72, 94.24, POS.office_name.w);
+      drawPos('office_name', v('office_name'));
       drawPos('date_year',    v('date_year'));
       drawPos('date_month',   v('date_month'));
       drawPos('date_day',     v('date_day'));
-      drawInCell(v('office_code'), POS.office_code.x, 62.72, 94.24, POS.office_code.w);
-      drawInCell(v('voucher_no'),  POS.voucher_no.x,  62.72, 94.24, POS.voucher_no.w);
+      drawCenteredInBox(v('office_code'), 559.52, 627.20, 62.72, 94.24);
+      drawCenteredInBox(v('voucher_no'),  627.20, 761.76, 62.72, 94.24);
 
       // ─ 明細行 ─
       for (let i = 0; i < NUM_ROWS; i++) {
@@ -823,7 +843,7 @@ async function generatePDF(withCopy) {
         drawInCell(gv(`payee_${i}`),      COL_X.payee.x,      yTop, yBottom, COL_X.payee.w);
         drawInCell(toHalfWidthAlnum(gv(`job_${i}`)),      COL_X.job.x,      yTop, yBottom, COL_X.job.w);
         drawInCell(toHalfWidthAlnum(gv(`category_${i}`)), COL_X.category.x, yTop, yBottom, COL_X.category.w);
-        drawInCell(gv(`expense_cd_${i}`), COL_X.expense_cd.x, yTop, yBottom, COL_X.expense_cd.w);
+        drawInCell(expenseCdLabel(gv(`expense_cd_${i}`)), COL_X.expense_cd.x, yTop, yBottom, COL_X.expense_cd.w);
         drawInCell(gv(`memo_cd_${i}`),    COL_X.memo_cd.x,    yTop, yBottom, COL_X.memo_cd.w);
 
         const amt = parseInt(gv(`amount_${i}`)) || 0;
