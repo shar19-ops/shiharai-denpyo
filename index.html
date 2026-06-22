@@ -1149,7 +1149,7 @@ async function generatePDF(withCopy) {
       drawPos('issue_day',   v('issue_day'));
       drawPos('dept',        v('dept'));
       drawPos('section',     v('section'));
-      drawPos('issuer',      v('issuer'));
+      draw(v('issuer'), POS.issuer.x, POS.issuer.y, POS.issuer.w, fs + 1);
 
       // ─ 収支CD・収支項目名 ─
       drawInCell(v('balance_cd'),   BALANCE_CD_X.x,   BALANCE_VALUE_BOUNDS[0], BALANCE_VALUE_BOUNDS[1], BALANCE_CD_X.w);
