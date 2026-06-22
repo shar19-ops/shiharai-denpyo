@@ -308,7 +308,7 @@
       <div class="field">
         <label>収支項目名</label>
         <div style="display:flex; gap:8px;">
-          <select id="balance_name" onchange="onBalanceNameChange()" style="flex:1;"></select>
+          <div data-acc style="flex:1;"><select id="balance_name" onchange="onBalanceNameChange()" style="width:100%;"></select></div>
           <button type="button" class="btn-secondary" data-acc style="font-size:12px; padding:0 10px;" onclick="openKessanModal()">📋 項目管理</button>
         </div>
       </div>
@@ -828,7 +828,7 @@ for (let i = 0; i < NUM_ROWS; i++) {
   const tr = document.createElement('tr');
   tr.innerHTML = `
     <td class="row-label" style="text-align:center;font-size:13px;color:#556;font-weight:600;">${i + 1}</td>
-    <td class="account-cell">
+    <td class="account-cell" data-acc>
       <select id="subject_${i}" class="account-select" onchange="renderAccountDisplay('subject_${i}')">${buildAccountOptions()}</select>
       <div class="account-display"><span class="acc-name"></span><span class="acc-code"></span></div>
     </td>
@@ -846,7 +846,7 @@ for (let i = 0; i < NUM_ROWS; i++) {
     <td><input type="text" id="summary_${i}" placeholder=""></td>
     <td><input type="text" id="payee_${i}" placeholder=""></td>
     <td><input type="text" id="job_${i}" placeholder="" oninput="this.value = toHalfWidthAlnum(this.value)"></td>
-    <td><input type="text" id="category_${i}" placeholder="" style="width:38px;" oninput="this.value = toHalfWidthAlnum(this.value)"></td>
+    <td><input type="text" id="category_${i}" placeholder="" style="width:38px; text-align:center;" oninput="this.value = toHalfWidthAlnum(this.value)"></td>
     <td data-acc><select class="tax-select" id="expense_cd_${i}">${expenseCdOptionsHtml('')}</select></td>
     <td data-acc><input type="text" id="memo_cd_${i}" placeholder=""></td>
     <td class="amount-cell"><input type="number" id="amount_${i}" placeholder="0" min="0" step="1" oninput="updateTotal()"></td>
@@ -1128,7 +1128,7 @@ async function generatePDF(withCopy) {
         drawInCell(gv(`summary_${i}`),    COL_X.summary.x,    yTop, yBottom, COL_X.summary.w);
         drawInCell(gv(`payee_${i}`),      COL_X.payee.x,      yTop, yBottom, COL_X.payee.w);
         drawInCell(toHalfWidthAlnum(gv(`job_${i}`)),      COL_X.job.x,      yTop, yBottom, COL_X.job.w);
-        drawInCell(toHalfWidthAlnum(gv(`category_${i}`)), COL_X.category.x, yTop, yBottom, COL_X.category.w);
+        drawCenteredInBox(toHalfWidthAlnum(gv(`category_${i}`)), 516.96, 559.20, yTop, yBottom);
         drawInCellShrink(expenseCdLabel(gv(`expense_cd_${i}`)), COL_X.expense_cd.x, yTop, yBottom, COL_X.expense_cd.w);
         drawInCell(gv(`memo_cd_${i}`),    COL_X.memo_cd.x,    yTop, yBottom, COL_X.memo_cd.w);
 
@@ -1161,7 +1161,7 @@ async function generatePDF(withCopy) {
       drawPos('issue_day',   v('issue_day'));
       drawPos('dept',        v('dept'));
       drawPos('section',     v('section'));
-      draw(v('issuer'), POS.issuer.x, POS.issuer.y, POS.issuer.w, fs + 1);
+      draw(v('issuer'), POS.issuer.x, POS.issuer.y, POS.issuer.w, 14);
 
       // ─ 収支CD・収支項目名 ─
       drawCenteredInBox(v('balance_cd'), 33.28, 91.20, BALANCE_VALUE_BOUNDS[0], BALANCE_VALUE_BOUNDS[1]);
