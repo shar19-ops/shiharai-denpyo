@@ -70,6 +70,20 @@
   table.detail tfoot td { background: #e8f0fb; font-weight: 700; padding: 8px 6px; }
   .total-amount { text-align: right; font-size: 15px; color: #1a4a7a; }
 
+  /* 借方科目セル（選択式・名称+コード表示） */
+  .account-cell { position: relative; }
+  .account-cell select.account-select {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    opacity: 0; cursor: pointer; padding: 0;
+  }
+  .account-cell .account-display {
+    font-size: 13px; line-height: 1.35; min-height: 2.7em;
+    display: flex; flex-direction: column; justify-content: center;
+    pointer-events: none;
+  }
+  .account-cell .account-display span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .account-cell .acc-code { color: #5a6a5f; font-size: 12px; }
+
   .tax-select { width: 100%; border: none; background: transparent; padding: 4px 2px; font-size: 13px; }
 
   .btn-bar { display: flex; gap: 12px; justify-content: center; padding: 20px 16px; }
@@ -239,7 +253,10 @@
   <div class="card">
     <div class="card-header" style="display:flex; align-items:center; justify-content:space-between;">
       <span>▌ 明細（最大7行）</span>
-      <button type="button" class="btn-secondary" data-acc style="font-size:12px; padding:4px 10px;" onclick="openExpenseCdModal()">📋 経費CD管理</button>
+      <div style="display:flex; gap:8px;">
+        <button type="button" class="btn-secondary" data-acc style="font-size:12px; padding:4px 10px;" onclick="openAccountModal()">📋 科目管理</button>
+        <button type="button" class="btn-secondary" data-acc style="font-size:12px; padding:4px 10px;" onclick="openExpenseCdModal()">📋 経費CD管理</button>
+      </div>
     </div>
     <div class="detail-table-wrap">
       <table class="detail">
@@ -323,6 +340,22 @@
   </div>
 
 </div><!-- /container -->
+
+<!-- 科目管理モーダル -->
+<div id="account-modal" class="modal-overlay" style="display:none">
+  <div class="modal-box">
+    <h2>📋 科目管理</h2>
+    <div id="account-list" style="max-height:300px; overflow-y:auto; margin-bottom:14px;"></div>
+    <div style="display:flex; gap:8px; margin-bottom:14px;">
+      <input type="text" id="new-account-name" placeholder="科目名（例：事務用品費）" style="flex:1;">
+      <input type="text" id="new-account-code" placeholder="コード（例：7317-001）" style="width:140px;">
+      <button class="btn-login" onclick="addAccount()">追加</button>
+    </div>
+    <div class="modal-btn-row">
+      <button class="btn-cancel" onclick="closeAccountModal()">閉じる</button>
+    </div>
+  </div>
+</div>
 
 <!-- 経費CD管理モーダル -->
 <div id="expense-cd-modal" class="modal-overlay" style="display:none">
@@ -562,6 +595,115 @@ function deleteExpenseCd(idx) {
   refreshAllExpenseCdSelects();
 }
 
+// ─── 借方科目リスト（transfer-slip-appの科目マスタを反映、ローカル保存・追加/削除可能） ──
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+}
+function loadExtraList(key) {
+  try { return JSON.parse(localStorage.getItem(key) || '[]').filter(v => typeof v === 'string' && v); }
+  catch (e) { return []; }
+}
+function saveExtraList(key, arr) {
+  try { localStorage.setItem(key, JSON.stringify(arr)); } catch (e) {}
+}
+
+const ACCOUNT_BASE = [
+  '預り金\n4118-999','飲食等交際費\n7334-002','受入利息\n7811-001','買掛金\n4113-001',
+  '仮受消費税\n4911-001','仮払金\n1303-999','仮払消費税\n1501-001','完成工事未収入金\n1202-001',
+  '広告宣伝費\n7333-001','交際費\n7334-001','工事保証金\n1307-001','工事未払金\n4112-001',
+  '差入保証金\n1307-002','雑費\n7342-001','事業税等\n7339-001','事務用品費\n7317-001',
+  '従業員給与手当\n7312-001','修繕維持費\n7316-001','租税公課\n7338-001','地代家賃\n7336-001',
+  '通信交通費ガス\n7322-001','通信交通費その他\n7324-001','通信交通費通信費\n7323-001','通信交通費定期\n7321-001',
+  '電話加入権\n2251-001','動力用水光熱費\n7331-001','七十七・本店普通\n1105-321','福利厚生費\n7315-001',
+  '法定福利費\n7314-001','保険料\n7341-001','本店\n6911-001','前払費用\n1208-001',
+  '未成工事受入金\n4117-001','未成工事支出金\n1205-001','三井住友・五反田出張所\n1104-111','未払費用\n4116-001',
+];
+let ACCOUNT_EXTRA = loadExtraList('general_affairs_slip_account_extra');
+let ACCOUNT_REMOVED = loadExtraList('general_affairs_slip_account_removed');
+const ACCOUNT_LIST = ACCOUNT_BASE.filter(v => !ACCOUNT_REMOVED.includes(v))
+  .concat(ACCOUNT_EXTRA.filter(v => !ACCOUNT_BASE.includes(v)));
+function buildAccountOptions() {
+  return '<option value=""></option>' + ACCOUNT_LIST.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v.replace('\n','　'))}</option>`).join('');
+}
+function renderAccountDisplay(id) {
+  const sel = document.getElementById(id);
+  if (!sel) return;
+  const disp = sel.nextElementSibling;
+  const [name, code] = sel.value.split('\n');
+  disp.querySelector('.acc-name').textContent = name || '';
+  disp.querySelector('.acc-code').textContent = code || '';
+}
+function refreshAllAccountDisplays() {
+  document.querySelectorAll('select.account-select').forEach(sel => renderAccountDisplay(sel.id));
+}
+function appendOptionToAccountSelects(value) {
+  document.querySelectorAll('select[id^="subject_"]').forEach(sel => {
+    const opt = document.createElement('option');
+    opt.value = value;
+    opt.textContent = value.replace('\n', '　');
+    sel.appendChild(opt);
+  });
+}
+function removeOptionFromAccountSelects(value) {
+  document.querySelectorAll('select[id^="subject_"]').forEach(sel => {
+    if (sel.value === value) { sel.value = ''; renderAccountDisplay(sel.id); }
+    const opt = Array.from(sel.options).find(o => o.value === value);
+    if (opt) opt.remove();
+  });
+}
+
+function openAccountModal() {
+  if (!accMode) { alert('科目管理は経理担当者のみ操作できます。\n右上の「経理担当者」からログインしてください。'); return; }
+  renderAccountModalList();
+  document.getElementById('account-modal').style.display = 'flex';
+}
+function closeAccountModal() {
+  document.getElementById('account-modal').style.display = 'none';
+}
+function renderAccountModalList() {
+  const container = document.getElementById('account-list');
+  if (ACCOUNT_LIST.length === 0) {
+    container.innerHTML = '<p style="color:#889; font-size:13px;">登録された科目はありません</p>';
+    return;
+  }
+  container.innerHTML = ACCOUNT_LIST.map((v, idx) => `
+    <div style="display:flex; align-items:center; gap:8px; padding:6px 2px; border-bottom:1px solid #eee;">
+      <span style="flex:1; font-size:14px;">${escapeHtml(v.replace('\n','　'))}</span>
+      <button class="btn-cancel" style="padding:4px 12px;" onclick="deleteAccount(${idx})">削除</button>
+    </div>
+  `).join('');
+}
+function addAccount() {
+  const nameEl = document.getElementById('new-account-name');
+  const codeEl = document.getElementById('new-account-code');
+  const name = nameEl.value.trim();
+  const code = codeEl.value.trim();
+  if (!name) { alert('科目名を入力してください'); return; }
+  const value = code ? `${name}\n${code}` : name;
+  if (ACCOUNT_LIST.includes(value)) { alert('既にリストにあります。'); return; }
+  ACCOUNT_LIST.push(value);
+  ACCOUNT_EXTRA.push(value);
+  saveExtraList('general_affairs_slip_account_extra', ACCOUNT_EXTRA);
+  appendOptionToAccountSelects(value);
+  nameEl.value = ''; codeEl.value = '';
+  renderAccountModalList();
+}
+function deleteAccount(idx) {
+  const value = ACCOUNT_LIST[idx];
+  if (!confirm(`「${value.replace('\n','　')}」を削除しますか？`)) return;
+  ACCOUNT_LIST.splice(idx, 1);
+  const extraIdx = ACCOUNT_EXTRA.indexOf(value);
+  if (extraIdx >= 0) {
+    ACCOUNT_EXTRA.splice(extraIdx, 1);
+    saveExtraList('general_affairs_slip_account_extra', ACCOUNT_EXTRA);
+  } else {
+    ACCOUNT_REMOVED.push(value);
+    saveExtraList('general_affairs_slip_account_removed', ACCOUNT_REMOVED);
+  }
+  removeOptionFromAccountSelects(value);
+  renderAccountModalList();
+}
+
 // ─── 行生成 ──────────────────────────────────────────────────
 const NUM_ROWS = 7;
 const tbody = document.getElementById('detail-tbody');
@@ -570,7 +712,10 @@ for (let i = 0; i < NUM_ROWS; i++) {
   const tr = document.createElement('tr');
   tr.innerHTML = `
     <td class="row-label" style="text-align:center;font-size:13px;color:#556;font-weight:600;">${i + 1}</td>
-    <td><input type="text" id="subject_${i}" placeholder="例：旅費交通費"></td>
+    <td class="account-cell">
+      <select id="subject_${i}" class="account-select" onchange="renderAccountDisplay('subject_${i}')">${buildAccountOptions()}</select>
+      <div class="account-display"><span class="acc-name"></span><span class="acc-code"></span></div>
+    </td>
     <td data-acc>
       <select class="tax-select" id="tax_${i}">
         <option value=""></option>
@@ -607,6 +752,7 @@ function clearForm() {
   if (!confirm('入力内容をすべてクリアしますか？')) return;
   document.querySelectorAll('input, select').forEach(el => { el.value = ''; });
   updateTotal();
+  refreshAllAccountDisplays();
 }
 
 // ─── 入力データの保存・読み込み ────────────────────────────
@@ -627,6 +773,7 @@ function applyFormData(data) {
     else el.value = val;
   });
   updateTotal();
+  refreshAllAccountDisplays();
 }
 
 async function saveData() {
@@ -756,6 +903,14 @@ async function generatePDF(withCopy) {
       if (cur) lines.push(cur);
       return lines;
     };
+    // 科目欄(name\ncode)等の改行入力(\n)を行として分け、各行をさらに幅に応じて折り返す
+    const wrapLinesMulti = (str, formSize, maxWidth) => {
+      let result = [];
+      for (const seg of str.split('\n')) {
+        result = result.concat(measureForm(seg, formSize) > maxWidth ? wrapLines(seg, formSize, maxWidth) : [seg]);
+      }
+      return result;
+    };
 
     const drawAt = (yOffset) => {
       const drawRunsAt = (str, xPagePt, yPagePt, pageSize) => {
@@ -784,10 +939,10 @@ async function generatePDF(withCopy) {
         const str = String(text);
         const cellHeight = yBottom - yTop;
         let sz = size || fs;
-        let lines = measureForm(str, sz) > maxWidth ? wrapLines(str, sz, maxWidth) : [str];
+        let lines = wrapLinesMulti(str, sz, maxWidth);
         while (lines.length * sz * LINE_GAP > cellHeight && sz > 5) {
           sz -= 0.5;
-          lines = measureForm(str, sz) > maxWidth ? wrapLines(str, sz, maxWidth) : [str];
+          lines = wrapLinesMulti(str, sz, maxWidth);
         }
         const blockHeight = lines.length * sz * LINE_GAP;
         const yCenter = (yTop + yBottom) / 2 + (vOffset || 0);
@@ -964,6 +1119,9 @@ document.getElementById('acc-modal').addEventListener('click', function(e) {
 });
 document.getElementById('export-modal').addEventListener('click', function(e) {
   if (e.target === this) closeExportModal();
+});
+document.getElementById('account-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeAccountModal();
 });</script>
 </body>
 </html>
