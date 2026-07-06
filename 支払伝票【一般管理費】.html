@@ -1647,8 +1647,41 @@ function imgToDataUrl(img, maxSide) {
 // ─── 手動トリミング ──────────────────────────────────────────
 let cropState = null;
 
+let _cropEvtReady = false;
 function openManualCrop() {
   if (!receiptOriginalImg) return;
+  if (!_cropEvtReady) {
+    _cropEvtReady = true;
+    document.getElementById('manual-crop-modal').addEventListener('click', function(e) {
+      if (e.target === this) cancelManualCrop();
+    });
+    const c = document.getElementById('crop-canvas');
+    c.addEventListener('pointerdown', function(e) {
+      if (!cropState) return;
+      const canvas = document.getElementById('crop-canvas');
+      const pos = getCropPosFromEvent(e, canvas);
+      const R = Math.max(32, canvas.width * 0.06);
+      const idx = cropState.corners.findIndex(p => Math.hypot(p.x - pos.x, p.y - pos.y) < R);
+      if (idx >= 0) {
+        cropState.dragIdx = idx;
+        canvas.setPointerCapture(e.pointerId);
+        e.preventDefault();
+      }
+    });
+    c.addEventListener('pointermove', function(e) {
+      if (!cropState || cropState.dragIdx < 0) return;
+      const canvas = document.getElementById('crop-canvas');
+      const pos = getCropPosFromEvent(e, canvas);
+      cropState.corners[cropState.dragIdx] = {
+        x: Math.max(0, Math.min(canvas.width, pos.x)),
+        y: Math.max(0, Math.min(canvas.height, pos.y)),
+      };
+      drawCropCanvas();
+      e.preventDefault();
+    }, { passive: false });
+    c.addEventListener('pointerup', function() { if (cropState) cropState.dragIdx = -1; });
+    c.addEventListener('pointercancel', function() { if (cropState) cropState.dragIdx = -1; });
+  }
   cropState = { img: receiptOriginalImg, rotation: 0, scale: 1, corners: [], dragIdx: -1 };
   rebuildCropCanvas();
   document.getElementById('manual-crop-modal').style.display = 'flex';
@@ -2022,35 +2055,7 @@ document.getElementById('acc-pw').addEventListener('keydown', function(e) {
 document.getElementById('acc-modal').addEventListener('click', function(e) {
   if (e.target === this) closeAccModal();
 });
-document.getElementById('manual-crop-modal').addEventListener('click', function(e) {
-  if (e.target === this) cancelManualCrop();
-});
-const cropCvs = document.getElementById('crop-canvas');
-cropCvs.addEventListener('pointerdown', function(e) {
-  if (!cropState) return;
-  const canvas = document.getElementById('crop-canvas');
-  const pos = getCropPosFromEvent(e, canvas);
-  const R = Math.max(32, canvas.width * 0.06);
-  const idx = cropState.corners.findIndex(p => Math.hypot(p.x - pos.x, p.y - pos.y) < R);
-  if (idx >= 0) {
-    cropState.dragIdx = idx;
-    canvas.setPointerCapture(e.pointerId);
-    e.preventDefault();
-  }
-});
-cropCvs.addEventListener('pointermove', function(e) {
-  if (!cropState || cropState.dragIdx < 0) return;
-  const canvas = document.getElementById('crop-canvas');
-  const pos = getCropPosFromEvent(e, canvas);
-  cropState.corners[cropState.dragIdx] = {
-    x: Math.max(0, Math.min(canvas.width, pos.x)),
-    y: Math.max(0, Math.min(canvas.height, pos.y)),
-  };
-  drawCropCanvas();
-  e.preventDefault();
-}, { passive: false });
-cropCvs.addEventListener('pointerup', function() { if (cropState) cropState.dragIdx = -1; });
-cropCvs.addEventListener('pointercancel', function() { if (cropState) cropState.dragIdx = -1; });
+
 document.getElementById('account-modal').addEventListener('click', function(e) {
   if (e.target === this) closeAccountModal();
 });
