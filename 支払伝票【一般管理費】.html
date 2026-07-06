@@ -381,7 +381,11 @@
   .receipt-btns { display: flex; gap: 10px; flex-wrap: wrap; padding: 16px 16px 0; }
   #receipt-status { font-size: 12px; color: #667; padding: 5px 16px; min-height: 20px; }
   .receipt-preview-wrap { padding: 0 16px 16px; }
-  #receipt-canvas { max-width: 100%; max-height: 320px; display: block; border: 1px solid #c5d8f0; border-radius: 6px; }
+  #receipt-thumbs { display: flex; flex-wrap: wrap; gap: 8px; }
+  .rcpt-thumb { position: relative; display: inline-flex; }
+  .rcpt-thumb canvas { max-height: 130px; max-width: 180px; border: 1px solid #c5d8f0; border-radius: 5px; display: block; }
+  .rcpt-thumb-del { position: absolute; top: 3px; right: 3px; background: rgba(0,0,0,0.55); color:#fff; border:none; border-radius:50%; width:20px; height:20px; cursor:pointer; font-size:12px; line-height:20px; padding:0; text-align:center; }
+  .rcpt-thumb-del:hover { background: rgba(200,0,0,0.85); }
   @keyframes rcv-spin { to { transform: rotate(360deg); } }
   .receipt-loading::before {
     content: ''; width: 12px; height: 12px;
@@ -603,14 +607,13 @@
       <button class="btn-scan" onclick="receiptScanCamera()">📷 カメラで撮影</button>
       <button class="btn-scan" onclick="receiptScanFile()">🖼 ファイルを選択</button>
       <button class="btn-scan" id="receipt-manual-btn" style="display:none;" onclick="openManualCrop()">✂ 手動トリミング</button>
-      <button class="btn-scan" id="receipt-ocr-btn" style="display:none;" onclick="receiptOcrRun()">📖 OCR読み取り</button>
-      <button class="btn-scan" id="receipt-ocr-key-btn" style="display:none;padding:5px 8px;font-size:11px;color:#667;" onclick="receiptOcrChangeKey()" title="Gemini APIキーを変更">🔑</button>
+
       <button class="btn-scan btn-scan-clear" id="receipt-clear-btn" style="display:none;" onclick="clearReceipt()">✕ クリア</button>
     </div>
     <p id="receipt-status"></p>
     <div class="receipt-preview-wrap" id="receipt-preview-wrap" style="display:none;">
-      <canvas id="receipt-canvas"></canvas>
-      <p style="font-size:12px; color:#778; margin-top:6px;">※ PDF出力時に末尾ページとして添付されます</p>
+      <div id="receipt-thumbs"></div>
+      <p style="font-size:12px; color:#778; margin-top:6px;">※ PDF出力時に添付されます（複数枚可）</p>
     </div>
     <input type="file" id="receipt-file-input" accept="image/*" style="display:none;" onchange="handleReceiptInput(this)">
     <input type="file" id="receipt-camera-input" accept="image/*" capture="environment" style="display:none;" onchange="handleReceiptInput(this)">
@@ -1499,18 +1502,32 @@ async function generatePDF(mode = 'download') {
       cx = ex + dashGap;
     }
 
-    // A4下半分に領収書を描画（あれば）
-    if (receiptImageDataUrl) {
-      const isJpeg = receiptImageDataUrl.startsWith('data:image/jpeg');
-      const b64 = receiptImageDataUrl.split(',')[1];
-      const rcptBytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
-      const embImg = isJpeg ? await a4Doc.embedJpg(rcptBytes) : await a4Doc.embedPng(rcptBytes);
-      const rm = 10;
-      const rcptAvailW = A4_W - 2 * rm;
-      const rcptAvailH = cutY - 2 * rm;
-      const sc = Math.min(rcptAvailW / embImg.width, rcptAvailH / embImg.height);
-      const iw = embImg.width * sc, ih = embImg.height * sc;
-      a4Page.drawImage(embImg, { x: (A4_W - iw) / 2, y: rm + (rcptAvailH - ih) / 2, width: iw, height: ih });
+    // A4下半分に1枚目の領収書を描画
+    if (receiptImages.length > 0) {
+      const r0 = receiptImages[0].dataUrl;
+      const isJpeg0 = r0.startsWith('data:image/jpeg');
+      const rcptBytes0 = Uint8Array.from(atob(r0.split(',')[1]), c => c.charCodeAt(0));
+      const embImg0 = isJpeg0 ? await a4Doc.embedJpg(rcptBytes0) : await a4Doc.embedPng(rcptBytes0);
+      const rm = 10, rcptAvailW = A4_W - 2*rm, rcptAvailH = cutY - 2*rm;
+      const sc0 = Math.min(rcptAvailW / embImg0.width, rcptAvailH / embImg0.height);
+      a4Page.drawImage(embImg0, {
+        x: (A4_W - embImg0.width*sc0) / 2, y: rm + (rcptAvailH - embImg0.height*sc0) / 2,
+        width: embImg0.width*sc0, height: embImg0.height*sc0
+      });
+    }
+    // 2枚目以降: 1ページずつ追加
+    for (let ri = 1; ri < receiptImages.length; ri++) {
+      const rUrl = receiptImages[ri].dataUrl;
+      const isJpegR = rUrl.startsWith('data:image/jpeg');
+      const rcptBytesR = Uint8Array.from(atob(rUrl.split(',')[1]), c => c.charCodeAt(0));
+      const embImgR = isJpegR ? await a4Doc.embedJpg(rcptBytesR) : await a4Doc.embedPng(rcptBytesR);
+      const rcptPage = a4Doc.addPage([A4_W, A4_H]);
+      const rmR = 20, avW = A4_W - 2*rmR, avH = A4_H - 2*rmR;
+      const scR = Math.min(avW / embImgR.width, avH / embImgR.height);
+      rcptPage.drawImage(embImgR, {
+        x: (A4_W - embImgR.width*scR) / 2, y: rmR + (avH - embImgR.height*scR) / 2,
+        width: embImgR.width*scR, height: embImgR.height*scR
+      });
     }
 
         const outBytes = await a4Doc.save();
@@ -1538,7 +1555,7 @@ async function generatePDF(mode = 'download') {
 }
 
 // ─── 領収書スキャン（v3新機能） ────────────────────────────────
-let receiptImageDataUrl = null;
+let receiptImages = []; // [{dataUrl, originalImg}]
 let receiptOriginalImg = null;
 let openCVPromise = null;
 
@@ -1579,125 +1596,54 @@ function receiptScanFile() {
   document.getElementById('receipt-file-input').click();
 }
 function clearReceipt() {
-  receiptImageDataUrl = null;
+  receiptImages = [];
   receiptOriginalImg = null;
+  document.getElementById('receipt-thumbs').innerHTML = '';
   document.getElementById('receipt-preview-wrap').style.display = 'none';
   document.getElementById('receipt-clear-btn').style.display = 'none';
   document.getElementById('receipt-manual-btn').style.display = 'none';
-  document.getElementById('receipt-ocr-btn').style.display = 'none';
-  document.getElementById('receipt-ocr-key-btn').style.display = 'none';
   setRcptStatus('');
 }
 
-async function receiptOcrRun() {
-  if (!receiptImageDataUrl) return;
+function renderReceiptThumbs() {
+  const container = document.getElementById('receipt-thumbs');
+  container.innerHTML = '';
+  receiptImages.forEach((rcpt, idx) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'rcpt-thumb';
+    const cvs = document.createElement('canvas');
+    const pi = new Image();
+    pi.onload = () => {
+      const sc = Math.min(180 / pi.width, 130 / pi.height, 1);
+      cvs.width = Math.round(pi.width * sc);
+      cvs.height = Math.round(pi.height * sc);
+      cvs.getContext('2d').drawImage(pi, 0, 0, cvs.width, cvs.height);
+    };
+    pi.src = rcpt.dataUrl;
+    const del = document.createElement('button');
+    del.className = 'rcpt-thumb-del';
+    del.textContent = '✕';
+    del.title = (idx + 1) + '枚目を削除';
+    del.onclick = () => removeReceiptAt(idx);
+    wrap.appendChild(cvs);
+    wrap.appendChild(del);
+    container.appendChild(wrap);
+  });
+  document.getElementById('receipt-preview-wrap').style.display =
+    receiptImages.length ? 'block' : 'none';
+}
 
-  let apiKey = localStorage.getItem('anthropic_ocr_key') || '';
-  if (!apiKey) {
-    const entered = prompt(
-      'Anthropic APIキーを入力してください。\n' +
-      '（https://console.anthropic.com/ → API Keys で取得）'
-    );
-    if (!entered || !entered.trim()) return;
-    apiKey = entered.trim();
-    localStorage.setItem('anthropic_ocr_key', apiKey);
-  }
-
-  setRcptStatus('📖 OCR読み取り中...', true);
-  const b64 = receiptImageDataUrl.split(',')[1];
-  const mime = receiptImageDataUrl.split(';')[0].split(':')[1] || 'image/jpeg';
-
-  const promptText =
-    'この領収書・レシート画像を解析し、次のJSONだけを返してください（説明文不要）:\n' +
-    '{"amount":税込合計金額の数値,"payee":"店舗名または支払先","date":"YYYY-MM-DD"}\n' +
-    '金額は数字のみ（記号・カンマ不要）。不明な項目はnull。';
-
-  let parsed;
-  try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 256,
-        messages: [{ role: 'user', content: [
-          { type: 'image', source: { type: 'base64', media_type: mime, data: b64 } },
-          { type: 'text', text: promptText },
-        ]}],
-      })
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      const msg = err.error?.message || ('HTTP ' + res.status);
-      if (res.status === 401 || res.status === 403) localStorage.removeItem('anthropic_ocr_key');
-      throw new Error(msg);
-    }
-    const data = await res.json();
-    const text = (data.content?.[0]?.text || '').trim();
-    const m = text.match(/\{[\s\S]*\}/);
-    if (!m) throw new Error('レスポンスからJSONを取得できませんでした');
-    parsed = JSON.parse(m[0]);
-  } catch (e) {
-    setRcptStatus('❌ OCRエラー: ' + e.message);
-    return;
-  }
-
-  let row = 0;
-  for (let i = 0; i < (typeof NUM_ROWS !== 'undefined' ? NUM_ROWS : 7); i++) {
-    const el = document.getElementById('payee_' + i);
-    if (el && !el.value.trim()) { row = i; break; }
-  }
-
-  const filled = [];
-  if (parsed.payee) {
-    const el = document.getElementById('payee_' + row);
-    if (el) { el.value = parsed.payee; filled.push('支払先'); }
-  }
-  if (parsed.amount !== null && parsed.amount !== undefined) {
-    const el = document.getElementById('amount_' + row);
-    if (el) { el.value = String(parsed.amount).replace(/[^0-9]/g, ''); updateTotal(); filled.push('金額'); }
-  }
-  if (parsed.date) {
-    try {
-      const dt = new Date(parsed.date + 'T00:00:00');
-      const md = (dt.getMonth() + 1) + '/' + dt.getDate();
-      const el = document.getElementById('summary_' + row);
-      if (el) { el.value = md; filled.push('摘要(日付)'); }
-    } catch (_) {}
-  }
-
-  if (filled.length) {
-    setRcptStatus('✅ OCR完了: ' + filled.join('・') + ' を ' + (row + 1) + '行目に入力しました');
+function removeReceiptAt(idx) {
+  receiptImages.splice(idx, 1);
+  if (receiptImages.length === 0) {
+    clearReceipt();
   } else {
-    setRcptStatus('⚠ OCR: 読み取れた項目がありませんでした');
+    receiptOriginalImg = receiptImages[receiptImages.length - 1].originalImg;
+    renderReceiptThumbs();
   }
 }
 
-function receiptOcrChangeKey() {
-  const entered = prompt('Anthropic APIキーを変更・削除します。\n新しいキーを入力してください（空欄でキーを削除）:',
-    localStorage.getItem('anthropic_ocr_key') || '');
-  if (entered === null) return;
-  if (entered.trim()) {
-    localStorage.setItem('anthropic_ocr_key', entered.trim());
-    setRcptStatus('🔑 APIキーを更新しました');
-  } else {
-    localStorage.removeItem('anthropic_ocr_key');
-    setRcptStatus('🔑 APIキーを削除しました');
-  }
-}
 
-function showReceiptPreviewImg(dataUrl) {
-  const cvs = document.getElementById('receipt-canvas');
-  const pi = new Image();
-  pi.onload = () => { cvs.width = pi.width; cvs.height = pi.height; cvs.getContext('2d').drawImage(pi, 0, 0); };
-  pi.src = dataUrl;
-  document.getElementById('receipt-preview-wrap').style.display = 'block';
-}
 
 async function handleReceiptInput(input) {
   const file = input.files[0];
@@ -1732,11 +1678,9 @@ async function handleReceiptInput(input) {
       setRcptStatus('自動トリミング不可 — ✂ 手動トリミングで範囲を指定できます');
     }
 
-    receiptImageDataUrl = resultUrl;
-    showReceiptPreviewImg(resultUrl);
+    receiptImages.push({ dataUrl: resultUrl, originalImg: img });
+    renderReceiptThumbs();
     document.getElementById('receipt-manual-btn').style.display = 'inline-flex';
-    document.getElementById('receipt-ocr-btn').style.display = 'inline-flex';
-    document.getElementById('receipt-ocr-key-btn').style.display = 'inline-flex';
     document.getElementById('receipt-clear-btn').style.display = 'inline-flex';
   } catch (e) {
     setRcptStatus('エラー: ' + e.message);
@@ -1897,8 +1841,14 @@ async function confirmManualCrop() {
     resultUrl = simpleCropFromCorners(rotatedCanvas, origCorners);
   }
   cropState = null;
-  receiptImageDataUrl = resultUrl;
-  showReceiptPreviewImg(resultUrl);
+  if (receiptImages.length > 0) {
+    receiptImages[receiptImages.length - 1].dataUrl = resultUrl;
+  } else {
+    receiptImages.push({ dataUrl: resultUrl, originalImg: receiptOriginalImg });
+    document.getElementById('receipt-manual-btn').style.display = 'inline-flex';
+    document.getElementById('receipt-clear-btn').style.display = 'inline-flex';
+  }
+  renderReceiptThumbs();
   setRcptStatus('手動トリミング完了');
 }
 
