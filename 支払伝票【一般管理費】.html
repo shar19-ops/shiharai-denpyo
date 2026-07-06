@@ -522,6 +522,30 @@
     </div>
   </div>
 
+  <!-- 領収書スキャン -->
+  <div class="card">
+    <div class="card-header" style="display:flex; align-items:center; justify-content:space-between;">
+      <span>▌ 領収書（任意）</span>
+      <span style="font-size:11px; color:#778; font-weight:400;">撮影またはファイルを自動トリミングして添付</span>
+    </div>
+    <p style="margin:0 16px 8px; padding:8px 12px; background:#fff8e1; border-left:3px solid #f5a623; border-radius:4px; font-size:12px; color:#7a5a00;">
+      ⚠ 領収書の原本は後日、経理担当へ提出してください。
+    </p>
+    <div class="receipt-btns">
+      <button class="btn-scan" onclick="receiptScanCamera()">📷 カメラで撮影</button>
+      <button class="btn-scan" onclick="receiptScanFile()">🖼 ファイルを選択</button>
+      <button class="btn-scan" id="receipt-manual-btn" style="display:none;" onclick="openManualCrop()">✂ 手動トリミング</button>
+      <button class="btn-scan btn-scan-clear" id="receipt-clear-btn" style="display:none;" onclick="clearReceipt()">✕ クリア</button>
+    </div>
+    <p id="receipt-status"></p>
+    <div class="receipt-preview-wrap" id="receipt-preview-wrap" style="display:none;">
+      <div id="receipt-thumbs"></div>
+      <p style="font-size:12px; color:#778; margin-top:6px;">※ PDF出力時に添付されます（複数枚可）</p>
+    </div>
+    <input type="file" id="receipt-file-input" accept="image/*" style="display:none;" onchange="handleReceiptInput(this)">
+    <input type="file" id="receipt-camera-input" accept="image/*" capture="environment" style="display:none;" onchange="handleReceiptInput(this)">
+  </div>
+
   <!-- 発行情報 -->
   <div class="card">
     <div class="card-header">▌ 発行情報</div>
@@ -595,28 +619,6 @@
         </div>
       </div>
     </div>
-  </div>
-
-  <!-- 領収書スキャン（v3） -->
-  <div class="card">
-    <div class="card-header" style="display:flex; align-items:center; justify-content:space-between;">
-      <span>▌ 領収書（任意）</span>
-      <span style="font-size:11px; color:#778; font-weight:400;">撮影またはファイルを自動トリミングして添付</span>
-    </div>
-    <div class="receipt-btns">
-      <button class="btn-scan" onclick="receiptScanCamera()">📷 カメラで撮影</button>
-      <button class="btn-scan" onclick="receiptScanFile()">🖼 ファイルを選択</button>
-      <button class="btn-scan" id="receipt-manual-btn" style="display:none;" onclick="openManualCrop()">✂ 手動トリミング</button>
-
-      <button class="btn-scan btn-scan-clear" id="receipt-clear-btn" style="display:none;" onclick="clearReceipt()">✕ クリア</button>
-    </div>
-    <p id="receipt-status"></p>
-    <div class="receipt-preview-wrap" id="receipt-preview-wrap" style="display:none;">
-      <div id="receipt-thumbs"></div>
-      <p style="font-size:12px; color:#778; margin-top:6px;">※ PDF出力時に添付されます（複数枚可）</p>
-    </div>
-    <input type="file" id="receipt-file-input" accept="image/*" style="display:none;" onchange="handleReceiptInput(this)">
-    <input type="file" id="receipt-camera-input" accept="image/*" capture="environment" style="display:none;" onchange="handleReceiptInput(this)">
   </div>
 
   <div id="status"></div>
@@ -1515,19 +1517,34 @@ async function generatePDF(mode = 'download') {
         width: embImg0.width*sc0, height: embImg0.height*sc0
       });
     }
-    // 2枚目以降: 1ページずつ追加
-    for (let ri = 1; ri < receiptImages.length; ri++) {
-      const rUrl = receiptImages[ri].dataUrl;
-      const isJpegR = rUrl.startsWith('data:image/jpeg');
-      const rcptBytesR = Uint8Array.from(atob(rUrl.split(',')[1]), c => c.charCodeAt(0));
-      const embImgR = isJpegR ? await a4Doc.embedJpg(rcptBytesR) : await a4Doc.embedPng(rcptBytesR);
-      const rcptPage = a4Doc.addPage([A4_W, A4_H]);
-      const rmR = 20, avW = A4_W - 2*rmR, avH = A4_H - 2*rmR;
-      const scR = Math.min(avW / embImgR.width, avH / embImgR.height);
-      rcptPage.drawImage(embImgR, {
-        x: (A4_W - embImgR.width*scR) / 2, y: rmR + (avH - embImgR.height*scR) / 2,
-        width: embImgR.width*scR, height: embImgR.height*scR
-      });
+    // 2枚目以降: A5ページに2×2グリッドでまとめて出力
+    if (receiptImages.length > 1) {
+      const A5W = 420, A5H = 595;
+      const marg = 15, gap = 8, cols = 2, rows = 2;
+      const cellW = (A5W - 2*marg - (cols-1)*gap) / cols;
+      const cellH = (A5H - 2*marg - (rows-1)*gap) / rows;
+      const extraImgs = [];
+      for (let ri = 1; ri < receiptImages.length; ri++) {
+        const rUrl = receiptImages[ri].dataUrl;
+        const isJp = rUrl.startsWith('data:image/jpeg');
+        const bytes = Uint8Array.from(atob(rUrl.split(',')[1]), c => c.charCodeAt(0));
+        extraImgs.push(isJp ? await a4Doc.embedJpg(bytes) : await a4Doc.embedPng(bytes));
+      }
+      let rcptPage = null;
+      for (let i = 0; i < extraImgs.length; i++) {
+        const slot = i % (cols * rows);
+        if (slot === 0) rcptPage = a4Doc.addPage([A5W, A5H]);
+        const col = slot % cols, row = Math.floor(slot / cols);
+        const cx = marg + col * (cellW + gap);
+        const cy = A5H - marg - (row + 1) * cellH - row * gap;
+        const emb = extraImgs[i];
+        const sc = Math.min(cellW / emb.width, cellH / emb.height);
+        rcptPage.drawImage(emb, {
+          x: cx + (cellW - emb.width*sc) / 2,
+          y: cy + (cellH - emb.height*sc) / 2,
+          width: emb.width*sc, height: emb.height*sc
+        });
+      }
     }
 
         const outBytes = await a4Doc.save();
