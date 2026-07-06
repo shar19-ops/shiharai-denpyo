@@ -604,6 +604,7 @@
       <button class="btn-scan" onclick="receiptScanFile()">🖼 ファイルを選択</button>
       <button class="btn-scan" id="receipt-manual-btn" style="display:none;" onclick="openManualCrop()">✂ 手動トリミング</button>
       <button class="btn-scan" id="receipt-ocr-btn" style="display:none;" onclick="receiptOcrRun()">📖 OCR読み取り</button>
+      <button class="btn-scan" id="receipt-ocr-key-btn" style="display:none;padding:5px 8px;font-size:11px;color:#667;" onclick="receiptOcrChangeKey()" title="Gemini APIキーを変更">🔑</button>
       <button class="btn-scan btn-scan-clear" id="receipt-clear-btn" style="display:none;" onclick="clearReceipt()">✕ クリア</button>
     </div>
     <p id="receipt-status"></p>
@@ -1584,6 +1585,7 @@ function clearReceipt() {
   document.getElementById('receipt-clear-btn').style.display = 'none';
   document.getElementById('receipt-manual-btn').style.display = 'none';
   document.getElementById('receipt-ocr-btn').style.display = 'none';
+  document.getElementById('receipt-ocr-key-btn').style.display = 'none';
   setRcptStatus('');
 }
 
@@ -1676,6 +1678,19 @@ async function receiptOcrRun() {
   }
 }
 
+function receiptOcrChangeKey() {
+  const entered = prompt('新しいGemini APIキーを入力してください（空欄でキャンセル）:',
+    localStorage.getItem('gemini_ocr_key') || '');
+  if (entered === null) return;
+  if (entered.trim()) {
+    localStorage.setItem('gemini_ocr_key', entered.trim());
+    setRcptStatus('🔑 APIキーを更新しました');
+  } else {
+    localStorage.removeItem('gemini_ocr_key');
+    setRcptStatus('🔑 APIキーを削除しました');
+  }
+}
+
 function showReceiptPreviewImg(dataUrl) {
   const cvs = document.getElementById('receipt-canvas');
   const pi = new Image();
@@ -1721,6 +1736,7 @@ async function handleReceiptInput(input) {
     showReceiptPreviewImg(resultUrl);
     document.getElementById('receipt-manual-btn').style.display = 'inline-flex';
     document.getElementById('receipt-ocr-btn').style.display = 'inline-flex';
+    document.getElementById('receipt-ocr-key-btn').style.display = 'inline-flex';
     document.getElementById('receipt-clear-btn').style.display = 'inline-flex';
   } catch (e) {
     setRcptStatus('エラー: ' + e.message);
