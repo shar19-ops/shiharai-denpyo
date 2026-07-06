@@ -1649,36 +1649,58 @@ let cropState = null;
 
 function openManualCrop() {
   if (!receiptOriginalImg) return;
-  const modal = document.getElementById('manual-crop-modal');
-  const canvas = document.getElementById('crop-canvas');
-  const img = receiptOriginalImg;
+  cropState = { img: receiptOriginalImg, rotation: 0, scale: 1, corners: [], dragIdx: -1 };
+  rebuildCropCanvas();
+  document.getElementById('manual-crop-modal').style.display = 'flex';
+}
+
+function rebuildCropCanvas() {
+  const { img, rotation } = cropState;
+  const tmp = document.createElement('canvas');
+  const ctx2 = tmp.getContext('2d');
+  if (rotation === 0) {
+    tmp.width = img.naturalWidth; tmp.height = img.naturalHeight;
+    ctx2.drawImage(img, 0, 0);
+  } else if (rotation === 90) {
+    tmp.width = img.naturalHeight; tmp.height = img.naturalWidth;
+    ctx2.translate(tmp.width, 0); ctx2.rotate(Math.PI / 2); ctx2.drawImage(img, 0, 0);
+  } else if (rotation === 180) {
+    tmp.width = img.naturalWidth; tmp.height = img.naturalHeight;
+    ctx2.translate(tmp.width, tmp.height); ctx2.rotate(Math.PI); ctx2.drawImage(img, 0, 0);
+  } else {
+    tmp.width = img.naturalHeight; tmp.height = img.naturalWidth;
+    ctx2.translate(0, tmp.height); ctx2.rotate(-Math.PI / 2); ctx2.drawImage(img, 0, 0);
+  }
+  cropState.rotatedCanvas = tmp;
   const maxW = Math.min(window.innerWidth * 0.88, 760);
   const maxH = Math.max(window.innerHeight * 0.58, 240);
-  const scale = Math.min(maxW / img.naturalWidth, maxH / img.naturalHeight, 1);
-  const cw = Math.round(img.naturalWidth * scale);
-  const ch = Math.round(img.naturalHeight * scale);
+  const scale = Math.min(maxW / tmp.width, maxH / tmp.height, 1);
+  const cw = Math.round(tmp.width * scale), ch = Math.round(tmp.height * scale);
+  const canvas = document.getElementById('crop-canvas');
   canvas.width = cw; canvas.height = ch;
+  cropState.scale = scale;
   const mx = cw * 0.08, my = ch * 0.08;
-  cropState = {
-    img, scale,
-    corners: [
-      { x: mx,      y: my },
-      { x: cw - mx, y: my },
-      { x: cw - mx, y: ch - my },
-      { x: mx,      y: ch - my },
-    ],
-    dragIdx: -1,
-  };
+  cropState.corners = [
+    { x: mx,      y: my },
+    { x: cw - mx, y: my },
+    { x: cw - mx, y: ch - my },
+    { x: mx,      y: ch - my },
+  ];
   drawCropCanvas();
-  modal.style.display = 'flex';
+}
+
+function rotateCrop(deg) {
+  if (!cropState) return;
+  cropState.rotation = ((cropState.rotation + deg) + 360) % 360;
+  rebuildCropCanvas();
 }
 
 function drawCropCanvas() {
   if (!cropState) return;
-  const { img, corners } = cropState;
+  const { rotatedCanvas, corners } = cropState;
   const canvas = document.getElementById('crop-canvas');
   const ctx = canvas.getContext('2d');
-  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  ctx.drawImage(rotatedCanvas, 0, 0, canvas.width, canvas.height);
   ctx.save();
   ctx.beginPath();
   ctx.rect(0, 0, canvas.width, canvas.height);
@@ -1743,16 +1765,16 @@ function cancelManualCrop() {
 
 async function confirmManualCrop() {
   if (!cropState) return;
-  const { img, corners, scale } = cropState;
+  const { rotatedCanvas, corners, scale } = cropState;
   document.getElementById('manual-crop-modal').style.display = 'none';
   setRcptStatus('手動トリミングを適用中...', true);
   const origCorners = corners.map(p => ({ x: p.x / scale, y: p.y / scale }));
   let resultUrl;
   try {
     const openCV = await ensureOpenCV();
-    resultUrl = await perspectiveWarpFromCorners(openCV, img, origCorners);
+    resultUrl = await perspectiveWarpFromCorners(openCV, rotatedCanvas, origCorners);
   } catch(e) {
-    resultUrl = simpleCropFromCorners(img, origCorners);
+    resultUrl = simpleCropFromCorners(rotatedCanvas, origCorners);
   }
   cropState = null;
   receiptImageDataUrl = resultUrl;
@@ -1760,21 +1782,22 @@ async function confirmManualCrop() {
   setRcptStatus('手動トリミング完了');
 }
 
-async function perspectiveWarpFromCorners(cv, img, corners) {
+async function perspectiveWarpFromCorners(cv, src, corners) {
   const [tl, tr, br, bl] = sortCorners(corners);
   const outW = Math.round(Math.max(Math.hypot(tr.x-tl.x,tr.y-tl.y), Math.hypot(br.x-bl.x,br.y-bl.y)));
   const outH = Math.round(Math.max(Math.hypot(bl.x-tl.x,bl.y-tl.y), Math.hypot(br.x-tr.x,br.y-tr.y)));
-  const ws = Math.min(1, 1200 / Math.max(img.naturalWidth, img.naturalHeight));
-  const sw = Math.round(img.naturalWidth * ws), sh = Math.round(img.naturalHeight * ws);
+  const srcW = src.naturalWidth || src.width, srcH = src.naturalHeight || src.height;
+  const ws = Math.min(1, 1200 / Math.max(srcW, srcH));
+  const sw = Math.round(srcW * ws), sh = Math.round(srcH * ws);
   const wCanvas = document.createElement('canvas');
   wCanvas.width = sw; wCanvas.height = sh;
   wCanvas.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;top:-9999px;left:-9999px';
-  wCanvas.getContext('2d').drawImage(img, 0, 0, sw, sh);
+  wCanvas.getContext('2d').drawImage(src, 0, 0, sw, sh);
   document.body.appendChild(wCanvas);
   let wSrc, wDst, M, sp, dp;
   try {
     wSrc = cv.imread(wCanvas);
-    sp = cv.matFromArray(4, 1, cv.CV_32FC2, [tl.x*ws,tl.y*ws, tr.x*ws,tr.y*ws, br.x*ws,br.y*ws, bl.x*ws,bl.y*ws]);
+    sp = cv.matFromArray(4, 1, cv.CV_32FC2, [tl.x*ws,tl.y*ws, tr.x*ws,tr.y*ws, br.x*ws,br.y*ws, bl.x*ws,bl.y*ws]); // corners already in src-pixel coords
     dp = cv.matFromArray(4, 1, cv.CV_32FC2, [0,0, outW*ws,0, outW*ws,outH*ws, 0,outH*ws]);
     M = cv.getPerspectiveTransform(sp, dp);
     wDst = new cv.Mat();
@@ -1789,14 +1812,15 @@ async function perspectiveWarpFromCorners(cv, img, corners) {
   }
 }
 
-function simpleCropFromCorners(img, corners) {
+function simpleCropFromCorners(src, corners) {
+  const srcW = src.naturalWidth || src.width, srcH = src.naturalHeight || src.height;
   const xs = corners.map(p => p.x), ys = corners.map(p => p.y);
   const x = Math.max(0, Math.min(...xs)), y = Math.max(0, Math.min(...ys));
-  const w = Math.min(img.naturalWidth - x, Math.max(...xs) - x);
-  const h = Math.min(img.naturalHeight - y, Math.max(...ys) - y);
+  const w = Math.min(srcW - x, Math.max(...xs) - x);
+  const h = Math.min(srcH - y, Math.max(...ys) - y);
   const canvas = document.createElement('canvas');
   canvas.width = Math.round(w); canvas.height = Math.round(h);
-  canvas.getContext('2d').drawImage(img, x, y, w, h, 0, 0, w, h);
+  canvas.getContext('2d').drawImage(src, x, y, w, h, 0, 0, w, h);
   return canvas.toDataURL('image/jpeg', 0.92);
 }
 
@@ -2024,12 +2048,11 @@ document.getElementById('manual-crop-modal').addEventListener('click', function(
 });
 const cropCvs = document.getElementById('crop-canvas');
 cropCvs.addEventListener('mousedown', cropDown);
-cropCvs.addEventListener('mousemove', cropMove);
-cropCvs.addEventListener('mouseup', cropUp);
-cropCvs.addEventListener('mouseleave', cropUp);
+document.addEventListener('mousemove', cropMove);
+document.addEventListener('mouseup', cropUp);
 cropCvs.addEventListener('touchstart', cropDown, { passive: false });
-cropCvs.addEventListener('touchmove', cropMove, { passive: false });
-cropCvs.addEventListener('touchend', cropUp);
+document.addEventListener('touchmove', cropMove, { passive: false });
+document.addEventListener('touchend', cropUp);
 document.getElementById('account-modal').addEventListener('click', function(e) {
   if (e.target === this) closeAccountModal();
 });
@@ -2041,6 +2064,10 @@ document.getElementById('kessan-modal').addEventListener('click', function(e) {
   <div class="manual-crop-box">
     <h2>✂ 手動トリミング</h2>
     <p>四隅の青いマーカーをドラッグして領収書の範囲を指定してください</p>
+    <div style="display:flex;justify-content:center;gap:12px;margin-bottom:6px;">
+      <button class="btn-scan" style="padding:7px 16px;font-size:13px;" onclick="rotateCrop(-90)">&#8634; 左90°</button>
+      <button class="btn-scan" style="padding:7px 16px;font-size:13px;" onclick="rotateCrop(90)">&#8635; 右90°</button>
+    </div>
     <div class="crop-canvas-wrap">
       <canvas id="crop-canvas"></canvas>
     </div>
