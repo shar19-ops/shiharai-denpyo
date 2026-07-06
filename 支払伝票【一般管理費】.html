@@ -604,8 +604,8 @@
     <button class="btn-secondary" onclick="loadData()">📂 読み込む</button>
     <button class="btn-secondary" onclick="saveData()">💾 保存</button>
     <button class="btn-secondary" onclick="clearForm()">クリア</button>
-    <button class="btn-secondary" onclick="printPDF()">🖨 印刷</button>
-    <button class="btn-primary" onclick="openExportModal()">📄 PDF 出力</button>
+    <button class="btn-secondary" onclick="generatePDF('print')">🖨 印刷</button>
+    <button class="btn-primary" onclick="generatePDF('download')">📄 PDF 出力</button>
   </div>
 
 </div><!-- /container -->
@@ -654,28 +654,6 @@
     </div>
     <div class="modal-btn-row">
       <button class="btn-cancel" onclick="closeExpenseCdModal()">閉じる</button>
-    </div>
-  </div>
-</div>
-
-<!-- 控え選択モーダル -->
-<div id="export-modal" class="modal-overlay" style="display:none">
-  <div class="modal-box">
-    <h2 id="export-modal-title">📄 PDF出力</h2>
-    <p>控え（同じ内容をA4に上下2面で出力）を付けますか？</p>
-    <div style="display:flex; flex-direction:column; gap:10px;">
-      <label style="display:flex; align-items:center; gap:8px; font-size:14px; cursor:pointer;">
-        <input type="radio" name="export-copy" id="export-copy-no" value="no" checked style="width:auto;">
-        控え なし（A5サイズをA4に1面出力）
-      </label>
-      <label style="display:flex; align-items:center; gap:8px; font-size:14px; cursor:pointer;">
-        <input type="radio" name="export-copy" id="export-copy-yes" value="yes" style="width:auto;">
-        控え あり（同じ内容をA4に上下2面出力）
-      </label>
-    </div>
-    <div class="modal-btn-row">
-      <button class="btn-cancel" onclick="closeExportModal()">キャンセル</button>
-      <button class="btn-login" id="export-modal-confirm-btn" onclick="confirmExport()">PDF生成</button>
     </div>
   </div>
 </div>
@@ -1209,28 +1187,6 @@ async function loadData() {
   }
 }
 
-// ─── 控え選択モーダル ────────────────────────────────────────
-let pendingExportMode = 'download';
-function openExportModal(mode) {
-  pendingExportMode = mode || 'download';
-  document.getElementById('export-modal-title').textContent = pendingExportMode === 'print' ? '🖨 印刷' : '📄 PDF出力';
-  document.getElementById('export-modal-confirm-btn').textContent = pendingExportMode === 'print' ? '印刷' : 'PDF生成';
-  document.getElementById('export-copy-no').checked = true;
-  document.getElementById('export-modal').style.display = 'flex';
-}
-function closeExportModal() {
-  document.getElementById('export-modal').style.display = 'none';
-}
-function confirmExport() {
-  const withCopy = document.getElementById('export-copy-yes').checked;
-  closeExportModal();
-  generatePDF(withCopy, pendingExportMode);
-}
-
-// ─── 印刷（PDFをダウンロードせず、その場で印刷ダイアログを開く） ──
-function printPDF() {
-  openExportModal('print');
-}
 // Chrome内蔵のPDFビューア（iframeにPDFを読み込む方式）はwindow.print()を
 // 呼んでも反応しないことがあるため、PDFを画像化してページ自体を印刷する。
 let pdfjsWorkerConfigured = false;
@@ -1256,7 +1212,7 @@ async function printViaCanvas(pdfBytes) {
 }
 
 // ─── PDF生成 ─────────────────────────────────────────────────
-async function generatePDF(withCopy, mode = 'download') {
+async function generatePDF(mode = 'download') {
   const statusEl = document.getElementById('status');
   statusEl.textContent = 'PDFを生成中...';
   statusEl.className = '';
@@ -1498,36 +1454,48 @@ async function generatePDF(withCopy, mode = 'download') {
       }
     };
 
-    const slots = withCopy ? [A4_H - A5_H, 0] : [A4_H - A5_H];
-    for (const yOffset of slots) {
-      a4Page.drawPage(templatePage, { x: 0, y: yOffset, width: A5_W, height: A5_H });
-      drawAt(yOffset);
+    // A4上半分に伝票を描画
+    const slotY = A4_H - A5_H;
+    a4Page.drawPage(templatePage, { x: 0, y: slotY, width: A5_W, height: A5_H });
+    drawAt(slotY);
+
+    // 中央に切取り線を描画
+    const cutY = slotY;
+    const cutClr = PDFLib.rgb(0.5, 0.5, 0.5);
+    const cutLabel = '切取り';
+    const cutLabelSize = 7.5;
+    const cutLabelW = jpFont.widthOfTextAtSize(cutLabel, cutLabelSize);
+    const cutLabelX = (A4_W - cutLabelW) / 2;
+    const dashLen = 9, dashGap = 5;
+    let cx = 4;
+    while (cx < cutLabelX - 6) {
+      const ex = Math.min(cx + dashLen, cutLabelX - 6);
+      a4Page.drawLine({ start: { x: cx, y: cutY }, end: { x: ex, y: cutY }, thickness: 0.5, color: cutClr });
+      cx = ex + dashGap;
+    }
+    a4Page.drawText(cutLabel, { x: cutLabelX, y: cutY - cutLabelSize * 0.4, size: cutLabelSize, font: jpFont, color: cutClr });
+    cx = cutLabelX + cutLabelW + 6;
+    while (cx < A4_W - 4) {
+      const ex = Math.min(cx + dashLen, A4_W - 4);
+      a4Page.drawLine({ start: { x: cx, y: cutY }, end: { x: ex, y: cutY }, thickness: 0.5, color: cutClr });
+      cx = ex + dashGap;
     }
 
-    // ─ 領収書を末尾ページに添付 ─
+    // A4下半分に領収書を描画（あれば）
     if (receiptImageDataUrl) {
-      const rcptPage = a4Doc.addPage([A4_W, A4_H]);
       const isJpeg = receiptImageDataUrl.startsWith('data:image/jpeg');
       const b64 = receiptImageDataUrl.split(',')[1];
       const rcptBytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
       const embImg = isJpeg ? await a4Doc.embedJpg(rcptBytes) : await a4Doc.embedPng(rcptBytes);
-      const margin = 30, labelH = 22;
-      const maxW = A4_W - 2 * margin;
-      const maxH = A4_H - 2 * margin - labelH;
-      const sc = Math.min(maxW / embImg.width, maxH / embImg.height);
+      const rm = 10;
+      const rcptAvailW = A4_W - 2 * rm;
+      const rcptAvailH = cutY - 2 * rm;
+      const sc = Math.min(rcptAvailW / embImg.width, rcptAvailH / embImg.height);
       const iw = embImg.width * sc, ih = embImg.height * sc;
-      rcptPage.drawImage(embImg, {
-        x: (A4_W - iw) / 2,
-        y: margin + (maxH - ih) / 2,
-        width: iw, height: ih
-      });
-      rcptPage.drawText('領収書', {
-        x: margin, y: A4_H - margin,
-        size: 10, font: jpFont, color: PDFLib.rgb(0.45, 0.45, 0.45)
-      });
+      a4Page.drawImage(embImg, { x: (A4_W - iw) / 2, y: rm + (rcptAvailH - ih) / 2, width: iw, height: ih });
     }
 
-    const outBytes = await a4Doc.save();
+        const outBytes = await a4Doc.save();
     if (mode === 'print') {
       await printViaCanvas(outBytes);
       statusEl.textContent = '印刷ダイアログを開きました';
@@ -1869,9 +1837,6 @@ document.getElementById('acc-pw').addEventListener('keydown', function(e) {
 });
 document.getElementById('acc-modal').addEventListener('click', function(e) {
   if (e.target === this) closeAccModal();
-});
-document.getElementById('export-modal').addEventListener('click', function(e) {
-  if (e.target === this) closeExportModal();
 });
 document.getElementById('account-modal').addEventListener('click', function(e) {
   if (e.target === this) closeAccountModal();
