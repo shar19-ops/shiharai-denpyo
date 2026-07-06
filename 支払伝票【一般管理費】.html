@@ -6,6 +6,187 @@
 <title>一般管理費支払伝票 入力</title>
 <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 <script src="https://unpkg.com/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.min.js"></script>
+<script src="https://unpkg.com/pdfjs-dist@3.11.174/legacy/build/pdf.min.js"></script>
+<script>
+/*
+ * date-stamp.js — 丸型デート印（日付印）描画ライブラリ（このHTMLに埋め込み・単体で動作）
+ * 使い方:
+ *   // Canvas（画面プレビュー）への描画。cx,cy は中心座標（円の中心）
+ *   DateStamp.draw(ctx, cx, cy, { name: "佐藤", date: new Date(), color: "red", radius: 50 });
+ *
+ *   // pdf-lib の PDFPage への焼き込み。font は pdf-lib で embed した PDFFont（日本語フォント推奨）
+ *   DateStamp.drawToPdf(page, cx, cy, { name: "佐藤", date: new Date(), color: "red", radius: 50, font: jpFont });
+ */
+(function (root, factory) {
+  if (typeof module === "object" && module.exports) {
+    module.exports = factory();
+  } else {
+    root.DateStamp = factory();
+  }
+})(typeof self !== "undefined" ? self : this, function () {
+  "use strict";
+
+  var COLORS = {
+    black: { r: 0, g: 0, b: 0 },
+    red: { r: 0.72, g: 0.06, b: 0.06 }
+  };
+
+  function resolveColor(name) {
+    return COLORS[name] || COLORS.red;
+  }
+
+  function pad2(n, doPad) {
+    return doPad ? String(n).padStart(2, "0") : String(n);
+  }
+
+  function toYMD(date) {
+    if (date instanceof Date) {
+      return { y: date.getFullYear(), m: date.getMonth() + 1, d: date.getDate() };
+    }
+    if (typeof date === "string") {
+      var dt = new Date(date);
+      return { y: dt.getFullYear(), m: dt.getMonth() + 1, d: dt.getDate() };
+    }
+    if (date && typeof date === "object") {
+      return { y: date.year, m: date.month, d: date.day };
+    }
+    var now = new Date();
+    return { y: now.getFullYear(), m: now.getMonth() + 1, d: now.getDate() };
+  }
+
+  function formatDate(date, options) {
+    var ymd = toYMD(date);
+    var pad = !!options.padZero;
+    var m = pad2(ymd.m, pad);
+    var d = pad2(ymd.d, pad);
+    switch (options.dateFormat) {
+      case "kanji":
+        return ymd.y + "年" + m + "月" + d + "日";
+      case "slash":
+        return ymd.y + "/" + m + "/" + d;
+      case "yy-slash": // "26/6/25"（年を2桁表記）
+        return String(ymd.y).slice(-2) + "/" + m + "/" + d;
+      case "dot":
+        return ymd.y + "." + m + "." + d;
+      default: // "dot-space"（サンプルの "2026. 6. 25" 形式）
+        return ymd.y + ". " + m + ". " + d;
+    }
+  }
+
+  function splitName(options) {
+    if (options.nameTop != null || options.nameBottom != null) {
+      return { top: options.nameTop || "", bottom: options.nameBottom || "" };
+    }
+    var name = (options.name || "").trim();
+    if (!name) return { top: "", bottom: "" };
+    var half = Math.ceil(name.length / 2);
+    return { top: name.slice(0, half), bottom: name.slice(half) };
+  }
+
+  // 円を3段（上段=名前/下段=名前/中段=日付）に分ける共通レイアウト計算
+  function computeLayout(options) {
+    var radius = options.radius || 50;
+    var bandRatio = options.bandRatio != null ? options.bandRatio : 1 / 3;
+    var offset = radius * bandRatio; // 中心から仕切り線までの距離
+    var chordHalf = Math.sqrt(Math.max(radius * radius - offset * offset, 0));
+    var names = splitName(options);
+    return {
+      radius: radius,
+      offset: offset,
+      chordHalf: chordHalf,
+      borderWidth: options.borderWidth || Math.max(radius * 0.04, 1.5),
+      color: resolveColor(options.color),
+      nameTop: names.top,
+      nameBottom: names.bottom,
+      dateText: formatDate(options.date, options),
+      nameFontSize: options.nameFontSize || radius * 0.4,
+      dateFontSize: options.dateFontSize || radius * 0.32,
+      fontFamily: options.fontFamily || '"Meiryo","Yu Gothic","MS Gothic",sans-serif'
+    };
+  }
+
+  function measure(options) {
+    var radius = options.radius || 50;
+    return { width: radius * 2, height: radius * 2, radius: radius };
+  }
+
+  // ---- Canvas描画（画面プレビュー用、原点は左上・Y下向き） ----
+  function draw(ctx, cx, cy, options) {
+    var L = computeLayout(options || {});
+    var css = "rgb(" + Math.round(L.color.r * 255) + "," + Math.round(L.color.g * 255) + "," + Math.round(L.color.b * 255) + ")";
+
+    ctx.save();
+    ctx.strokeStyle = css;
+    ctx.fillStyle = css;
+    ctx.lineWidth = L.borderWidth;
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, L.radius, 0, Math.PI * 2);
+    ctx.stroke();
+
+    if (L.nameTop || L.nameBottom) {
+      ctx.beginPath();
+      ctx.moveTo(cx - L.chordHalf, cy - L.offset);
+      ctx.lineTo(cx + L.chordHalf, cy - L.offset);
+      ctx.moveTo(cx - L.chordHalf, cy + L.offset);
+      ctx.lineTo(cx + L.chordHalf, cy + L.offset);
+      ctx.stroke();
+    }
+
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    if (L.nameTop) {
+      ctx.font = "bold " + L.nameFontSize + "px " + L.fontFamily;
+      ctx.fillText(L.nameTop, cx, cy - (L.radius + L.offset) / 2);
+    }
+    if (L.nameBottom) {
+      ctx.font = "bold " + L.nameFontSize + "px " + L.fontFamily;
+      ctx.fillText(L.nameBottom, cx, cy + (L.radius + L.offset) / 2);
+    }
+
+    ctx.font = "bold " + L.dateFontSize + "px " + L.fontFamily;
+    ctx.fillText(L.dateText, cx, cy);
+
+    ctx.restore();
+  }
+
+  // ---- pdf-lib描画（PDF焼き込み用、原点は左下・Y上向き） ----
+  // options.font は pdf-lib で embedFont した PDFFont を渡すこと（日本語を含む場合は日本語フォント必須）
+  function drawToPdf(page, cx, cy, options) {
+    var L = computeLayout(options || {});
+    var PDFLib = (typeof window !== "undefined" && window.PDFLib) || (typeof self !== "undefined" && self.PDFLib);
+    if (!PDFLib) throw new Error("DateStamp.drawToPdf: pdf-lib (global PDFLib) が見つかりません。先に pdf-lib を読み込んでください。");
+    var font = options.font;
+    if (!font) throw new Error("DateStamp.drawToPdf: options.font (embedFont済みのPDFFont) を指定してください。");
+
+    var color = PDFLib.rgb(L.color.r, L.color.g, L.color.b);
+
+    page.drawCircle({ x: cx, y: cy, size: L.radius, borderColor: color, borderWidth: L.borderWidth });
+
+    if (L.nameTop || L.nameBottom) {
+      page.drawLine({ start: { x: cx - L.chordHalf, y: cy + L.offset }, end: { x: cx + L.chordHalf, y: cy + L.offset }, thickness: L.borderWidth, color: color });
+      page.drawLine({ start: { x: cx - L.chordHalf, y: cy - L.offset }, end: { x: cx + L.chordHalf, y: cy - L.offset }, thickness: L.borderWidth, color: color });
+    }
+
+    function centerText(text, size, centerX, centerY) {
+      var w = font.widthOfTextAtSize(text, size);
+      page.drawText(text, { x: centerX - w / 2, y: centerY - size * 0.35, size: size, font: font, color: color });
+    }
+
+    if (L.nameTop) centerText(L.nameTop, L.nameFontSize, cx, cy + (L.radius + L.offset) / 2);
+    if (L.nameBottom) centerText(L.nameBottom, L.nameFontSize, cx, cy - (L.radius + L.offset) / 2);
+    centerText(L.dateText, L.dateFontSize, cx, cy);
+  }
+
+  return {
+    draw: draw,
+    drawToPdf: drawToPdf,
+    measure: measure,
+    formatDate: formatDate
+  };
+});
+</script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: "Meiryo", "Yu Gothic", "MS Gothic", sans-serif; background: #f0f4f8; color: #1a1a2e; font-size: 15px; }
@@ -110,6 +291,17 @@
     .date-row { flex-wrap: wrap; }
   }
 
+  /* 印刷：PDFを画像化して#print-areaに描画し、それだけを印刷する */
+  #print-area { display: none; }
+  @media print {
+    @page { size: A4; margin: 2.97mm 2.1mm; } /* 約98%に縮小して配置（プリンタの印刷不可領域での欠けを防ぐ） */
+    body * { visibility: hidden; }
+    #print-area, #print-area * { visibility: visible; }
+    #print-area { display: block; position: absolute; top: 0; left: 0; width: 100%; margin: 0; padding: 0; }
+    #print-area canvas { width: 100%; height: auto; display: block; margin: 0; padding: 0; }
+    #print-area canvas:not(:last-child) { page-break-after: always; }
+  }
+
   /* 経理担当者認証 ─────────────────────────── */
   .acc-badge { margin-left: auto; display: flex; align-items: center; gap: 10px; }
   .btn-acc {
@@ -177,6 +369,8 @@
 </style>
 </head>
 <body>
+
+<div id="print-area"></div>
 
 <header>
   <h1>一般管理費支払伝票</h1>
@@ -319,8 +513,9 @@
         <input type="text" id="employee_cd" placeholder="例：1234567" maxlength="7">
       </div>
       <div class="field">
-        <label>発行者</label>
-        <input type="text" id="issuer" placeholder="">
+        <label>発行者（苗字 名前の間にスペース）</label>
+        <input type="text" id="issuer" placeholder="例：佐藤 太郎">
+        <span id="issuer-name-error" style="display:none; font-size:11px; color:#c0392b;">苗字と名前の間にスペースを入力してください</span>
       </div>
       <div class="field">
         <label>部</label>
@@ -331,6 +526,33 @@
         <input type="text" id="section" placeholder="">
       </div>
     </div>
+    <div style="padding:0 16px 16px; display:flex; align-items:center; gap:12px; border-top:1px solid #e0e8f0; margin:4px 16px 0; padding-top:14px;">
+      <canvas id="stamp-preview" width="84" height="84" style="background:#fafcff; border:1px solid #e0e8f0; border-radius:6px;"></canvas>
+      <div style="display:flex; flex-direction:column; gap:6px;">
+        <span style="font-size:12px; color:#556; font-weight:600;">発行者印（デート印・苗字＋発行日。役職があれば下段に表示）</span>
+        <div style="display:flex; gap:16px; align-items:center; flex-wrap:wrap;">
+          <label style="display:flex; gap:6px; align-items:center; font-size:13px; font-weight:600;">
+            <input type="checkbox" id="stamp_enabled" checked> デート印を表示する
+          </label>
+          <label style="display:flex; gap:6px; align-items:center; font-size:13px; font-weight:600;">役職
+            <select id="issuer_title" onchange="onIssuerTitleChange()">
+              <option value="">（なし）</option>
+              <option value="副長">副長</option>
+              <option value="課長">課長</option>
+              <option value="工事長">工事長</option>
+              <option value="支店長">支店長</option>
+              <option value="部長">部長</option>
+              <option value="本部長">本部長</option>
+              <option value="取締役">取締役</option>
+              <option value="常務">常務</option>
+              <option value="本店長">本店長</option>
+            </select>
+          </label>
+          <label style="display:flex; gap:6px; align-items:center; font-size:13px; font-weight:600;"><input type="radio" name="stamp_color" value="red"> 朱（赤）</label>
+          <label style="display:flex; gap:6px; align-items:center; font-size:13px; font-weight:600;"><input type="radio" name="stamp_color" value="black" checked> 黒</label>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div id="status"></div>
@@ -339,6 +561,7 @@
     <button class="btn-secondary" onclick="loadData()">📂 読み込む</button>
     <button class="btn-secondary" onclick="saveData()">💾 保存</button>
     <button class="btn-secondary" onclick="clearForm()">クリア</button>
+    <button class="btn-secondary" onclick="printPDF()">🖨 印刷</button>
     <button class="btn-primary" onclick="openExportModal()">📄 PDF 出力</button>
   </div>
 
@@ -395,7 +618,7 @@
 <!-- 控え選択モーダル -->
 <div id="export-modal" class="modal-overlay" style="display:none">
   <div class="modal-box">
-    <h2>📄 PDF出力</h2>
+    <h2 id="export-modal-title">📄 PDF出力</h2>
     <p>控え（同じ内容をA4に上下2面で出力）を付けますか？</p>
     <div style="display:flex; flex-direction:column; gap:10px;">
       <label style="display:flex; align-items:center; gap:8px; font-size:14px; cursor:pointer;">
@@ -409,7 +632,7 @@
     </div>
     <div class="modal-btn-row">
       <button class="btn-cancel" onclick="closeExportModal()">キャンセル</button>
-      <button class="btn-login" onclick="confirmExport()">PDF生成</button>
+      <button class="btn-login" id="export-modal-confirm-btn" onclick="confirmExport()">PDF生成</button>
     </div>
   </div>
 </div>
@@ -431,6 +654,7 @@ const OFFICE_MAP = {
 function onOfficeChange() {
   const name = document.getElementById('office_name').value;
   document.getElementById('office_code').value = OFFICE_MAP[name] || '';
+  redrawStampPreview();
 }
 
 function toHalfWidthAlnum(str) {
@@ -943,7 +1167,11 @@ async function loadData() {
 }
 
 // ─── 控え選択モーダル ────────────────────────────────────────
-function openExportModal() {
+let pendingExportMode = 'download';
+function openExportModal(mode) {
+  pendingExportMode = mode || 'download';
+  document.getElementById('export-modal-title').textContent = pendingExportMode === 'print' ? '🖨 印刷' : '📄 PDF出力';
+  document.getElementById('export-modal-confirm-btn').textContent = pendingExportMode === 'print' ? '印刷' : 'PDF生成';
   document.getElementById('export-copy-no').checked = true;
   document.getElementById('export-modal').style.display = 'flex';
 }
@@ -953,14 +1181,48 @@ function closeExportModal() {
 function confirmExport() {
   const withCopy = document.getElementById('export-copy-yes').checked;
   closeExportModal();
-  generatePDF(withCopy);
+  generatePDF(withCopy, pendingExportMode);
+}
+
+// ─── 印刷（PDFをダウンロードせず、その場で印刷ダイアログを開く） ──
+function printPDF() {
+  openExportModal('print');
+}
+// Chrome内蔵のPDFビューア（iframeにPDFを読み込む方式）はwindow.print()を
+// 呼んでも反応しないことがあるため、PDFを画像化してページ自体を印刷する。
+let pdfjsWorkerConfigured = false;
+async function printViaCanvas(pdfBytes) {
+  if (!pdfjsWorkerConfigured) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@3.11.174/legacy/build/pdf.worker.min.js';
+    pdfjsWorkerConfigured = true;
+  }
+  const pdf = await pdfjsLib.getDocument({ data: pdfBytes }).promise;
+  const printArea = document.getElementById('print-area');
+  printArea.innerHTML = '';
+  const scale = 2; // 約144dpi相当
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const viewport = page.getViewport({ scale });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    printArea.appendChild(canvas);
+  }
+  window.print();
 }
 
 // ─── PDF生成 ─────────────────────────────────────────────────
-async function generatePDF(withCopy) {
+async function generatePDF(withCopy, mode = 'download') {
   const statusEl = document.getElementById('status');
   statusEl.textContent = 'PDFを生成中...';
   statusEl.className = '';
+
+  if (getStampEnabled() && v('issuer') && !splitIssuerName(v('issuer'))) {
+    statusEl.textContent = '発行者名は苗字と名前の間にスペースを入れて入力してください（例：佐藤 太郎）';
+    statusEl.className = 'status-err';
+    return;
+  }
 
   try {
     const pdfBytes = Uint8Array.from(atob(TEMPLATE_B64), c => c.charCodeAt(0));
@@ -1002,6 +1264,9 @@ async function generatePDF(withCopy) {
     const A5_W = 595.32, A5_H = 419.52;
     const a4Page = a4Doc.addPage([A4_W, A4_H]);
     const fs = 11;
+    // 「発行者　㊞」欄の空きスペースの中心座標（テンプレートPDFを画像化して実測。上の合計欄の枠線・下の経理部枠線に当たらない範囲）
+    // サイズ1.2倍化に合わせて左に5mm(約14.17pt)移動
+    const STAMP_ISSUER_CENTER = { x: 552.29, y: 108.0 };
 
     const LINE_GAP = 1.15;
     const measureForm = (str, formSize) => {
@@ -1175,6 +1440,19 @@ async function generatePDF(withCopy) {
           drawCenteredChar(empCd[c], EMPLOYEE_CD_CELLS_X[c], eTop, eBottom);
         }
       }
+
+      // ─ 発行者印（デート印、発行者 ㊞欄に焼き込み） ─
+      const issuerParsed = splitIssuerName(v('issuer'));
+      if (getStampEnabled() && issuerParsed) {
+        DateStamp.drawToPdf(a4Page, STAMP_ISSUER_CENTER.x, yOffset + STAMP_ISSUER_CENTER.y, {
+          ...stampNameOptions(issuerParsed.sei, v('issuer_title')),
+          date: getIssueDateForStamp(),
+          dateFormat: 'yy-slash',
+          color: getStampColor(),
+          radius: 24,
+          font: jpFont
+        });
+      }
     };
 
     const slots = withCopy ? [A4_H - A5_H, 0] : [A4_H - A5_H];
@@ -1184,17 +1462,22 @@ async function generatePDF(withCopy) {
     }
 
     const outBytes = await a4Doc.save();
-    const blob = new Blob([outBytes], { type: 'application/pdf' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    const dateStr = [v('date_year'), v('date_month'), v('date_day')].filter(Boolean).join('-') || 'output';
-    a.download = `一般管理費支払伝票_${dateStr}.pdf`;
-    a.click();
-    URL.revokeObjectURL(url);
-
-    statusEl.textContent = 'PDF出力完了！';
-    statusEl.className = 'status-ok';
+    if (mode === 'print') {
+      await printViaCanvas(outBytes);
+      statusEl.textContent = '印刷ダイアログを開きました';
+      statusEl.className = 'status-ok';
+    } else {
+      const blob = new Blob([outBytes], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const dateStr = [v('date_year'), v('date_month'), v('date_day')].filter(Boolean).join('-') || 'output';
+      a.download = `一般管理費支払伝票_${dateStr}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      statusEl.textContent = 'PDF出力完了！';
+      statusEl.className = 'status-ok';
+    }
   } catch (err) {
     console.error(err);
     statusEl.textContent = 'エラー: ' + err.message;
@@ -1205,6 +1488,65 @@ async function generatePDF(withCopy) {
 // ─── ユーティリティ ──────────────────────────────────────────
 function v(id)  { return (document.getElementById(id)?.value || '').trim(); }
 function gv(id) { return (document.getElementById(id)?.value || '').trim(); }
+
+// ─── 発行者印（デート印）プレビュー ─────────────────────────
+const stampCtx = document.getElementById('stamp-preview').getContext('2d');
+// 課長以下は黒、工事長以上は赤がデフォルト
+const TITLE_DEFAULT_COLOR = { '': 'black', '副長': 'black', '課長': 'black', '工事長': 'red', '支店長': 'red', '部長': 'red', '本部長': 'red', '取締役': 'red', '常務': 'red', '本店長': 'red' };
+function splitIssuerName(str) {
+  const parts = String(str || '').split(/[ 　]+/).filter(Boolean);
+  if (parts.length < 2) return null;
+  return { sei: parts[0], mei: parts.slice(1).join(' ') };
+}
+function getStampColor() {
+  const el = document.querySelector('input[name="stamp_color"]:checked');
+  return el ? el.value : 'black';
+}
+function getStampEnabled() {
+  const el = document.getElementById('stamp_enabled');
+  return el ? el.checked : true;
+}
+function getIssueDateForStamp() {
+  const y = parseInt(v('issue_year'));
+  const m = parseInt(v('issue_month'));
+  const d = parseInt(v('issue_day'));
+  if (y && m && d) return { year: y, month: m, day: d };
+  return new Date();
+}
+// 役職なし：苗字を上下に分割（例：佐藤→上「佐」下「藤」）／役職あり：上に苗字、下に役職
+// 役職が支店長の場合は例外：上段に事業所名（「支店」を除いた文字。例：東関東支店→東関東）、下段に「支店長」
+function stampNameOptions(sei, title) {
+  if (title === '支店長') {
+    const office = v('office_name').replace(/支店$/, '');
+    return { nameTop: office, nameBottom: title };
+  }
+  return title ? { nameTop: sei, nameBottom: title } : { name: sei };
+}
+function onIssuerTitleChange() {
+  const color = TITLE_DEFAULT_COLOR[v('issuer_title')] || 'black';
+  const el = document.querySelector(`input[name="stamp_color"][value="${color}"]`);
+  if (el) el.checked = true;
+  redrawStampPreview();
+}
+function redrawStampPreview() {
+  const canvas = stampCtx.canvas;
+  stampCtx.clearRect(0, 0, canvas.width, canvas.height);
+  const errEl = document.getElementById('issuer-name-error');
+  if (!getStampEnabled()) { errEl.style.display = 'none'; return; }
+  const raw = v('issuer');
+  if (!raw) { errEl.style.display = 'none'; return; }
+  const parsed = splitIssuerName(raw);
+  if (!parsed) { errEl.style.display = 'block'; return; }
+  errEl.style.display = 'none';
+  DateStamp.draw(stampCtx, canvas.width / 2, canvas.height / 2, {
+    ...stampNameOptions(parsed.sei, v('issuer_title')),
+    date: getIssueDateForStamp(), dateFormat: 'yy-slash', color: getStampColor(), radius: 36
+  });
+}
+document.getElementById('issuer').addEventListener('input', redrawStampPreview);
+['issue_year','issue_month','issue_day'].forEach(id => document.getElementById(id).addEventListener('input', redrawStampPreview));
+document.querySelectorAll('input[name="stamp_color"]').forEach(el => el.addEventListener('change', redrawStampPreview));
+document.getElementById('stamp_enabled').addEventListener('change', redrawStampPreview);
 
 // ─── 経理担当者認証 ─────────────────────────────────────────
 const ACC_PASS = 'acc';
