@@ -1251,6 +1251,11 @@ async function generatePDF(mode = 'download') {
     const { PDFDocument } = PDFLib;
 
     const a4Doc = await PDFDocument.create();
+    const _now = new Date();
+    a4Doc.setCreationDate(_now);
+    a4Doc.setModificationDate(_now);
+    a4Doc.setProducer('支払伝票【一般管理費】アプリ');
+    a4Doc.setCreator(document.getElementById('issuer')?.value || '');
     a4Doc.registerFontkit(fontkit);
 
     let jpFont, asciiFont;
