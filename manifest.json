@@ -1,0 +1,13 @@
+{
+  "name": "一般管理費支払伝票",
+  "short_name": "支払伝票（一般）",
+  "start_url": "./支払伝票【一般管理費】.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1a8cff",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
