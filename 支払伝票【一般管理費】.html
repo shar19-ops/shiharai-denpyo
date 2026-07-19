@@ -451,27 +451,7 @@
   <!-- ヘッダー情報 -->
   <div class="card">
     <div class="card-header">▌ ヘッダー情報</div>
-    <div class="field-grid field-grid-2">
-      <div class="field">
-        <label>事業所名</label>
-        <select id="office_name" onchange="onOfficeChange()">
-          <option value=""></option>
-          <option value="本店">本店</option>
-          <option value="東関東支店">東関東支店</option>
-          <option value="横浜支店">横浜支店</option>
-          <option value="大阪支店">大阪支店</option>
-          <option value="名古屋支店">名古屋支店</option>
-          <option value="仙台支店">仙台支店</option>
-          <option value="北関東支店">北関東支店</option>
-        </select>
-      </div>
-      <div class="field">
-        <label>事業所CD</label>
-        <input type="text" id="office_code" placeholder="" readonly style="background:#f0f4f8; color:#445;">
-      </div>
-    </div>
-
-    <div class="field-grid field-grid-2" style="padding-top:0; align-items:end;">
+    <div style="display:flex; flex-wrap:wrap; align-items:end; gap:16px 20px; padding:16px;">
       <div style="display:flex; align-items:center; gap:6px;">
         <span style="margin-top:18px; font-size:13px; color:#556;">日付</span>
         <div class="field"><label>年</label><div data-acc><input type="number" id="date_year" style="width:72px;" placeholder="2025"></div></div>
@@ -483,9 +463,26 @@
         <button type="button" class="btn-calendar" data-acc title="カレンダーから選択" onclick="openDatePicker('date_year','date_month','date_day','date_picker_main')">📅</button>
         <input type="date" id="date_picker_main" class="date-picker-hidden" onchange="applyDatePicker(this,'date_year','date_month','date_day')">
       </div>
-      <div class="field">
+      <div class="field" style="flex:1 1 130px; min-width:110px;">
         <label>伝票番号</label>
         <div data-acc><input type="text" id="voucher_no" placeholder="" style="width:100%;"></div>
+      </div>
+      <div class="field" style="flex:0 0 100px;">
+        <label>事業所CD</label>
+        <input type="text" id="office_code" placeholder="" readonly style="background:#f0f4f8; color:#445; width:100%;">
+      </div>
+      <div class="field" style="flex:1 1 160px; min-width:140px;">
+        <label>事業所名</label>
+        <select id="office_name" onchange="onOfficeChange()" style="width:100%;">
+          <option value=""></option>
+          <option value="本店">本店</option>
+          <option value="東関東支店">東関東支店</option>
+          <option value="横浜支店">横浜支店</option>
+          <option value="大阪支店">大阪支店</option>
+          <option value="名古屋支店">名古屋支店</option>
+          <option value="仙台支店">仙台支店</option>
+          <option value="北関東支店">北関東支店</option>
+        </select>
       </div>
     </div>
   </div>
@@ -636,8 +633,7 @@
     <button class="btn-secondary" onclick="loadData()">📂 読み込む</button>
     <button class="btn-secondary" onclick="saveData()">💾 保存</button>
     <button class="btn-secondary" onclick="clearForm()">クリア</button>
-    <button class="btn-secondary" onclick="generatePDF('print')">🖨 印刷</button>
-    <button class="btn-primary" onclick="generatePDF('download')">📄 PDF 出力</button>
+    <button class="btn-primary" onclick="generatePDF('print')">🖨 印刷 / PDF出力</button>
   </div>
 
 </div><!-- /container -->
