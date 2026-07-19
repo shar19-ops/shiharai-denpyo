@@ -1151,6 +1151,7 @@ function updateTotal() {
 function clearForm() {
   if (!confirm('入力内容をすべてクリアしますか？')) return;
   document.querySelectorAll('input, select').forEach(el => { el.value = ''; });
+  clearReceipt();
   setDefaultIssueDate();
   updateTotal();
   refreshAllAccountDisplays();
@@ -1158,7 +1159,7 @@ function clearForm() {
 
 // ─── 入力データの保存・読み込み ────────────────────────────
 function collectFormData() {
-  const data = {};
+  const data = { __receiptImages: receiptImages.map(r => r.dataUrl) };
   document.querySelectorAll('.container input, .container select').forEach(el => {
     if (!el.id) return;
     data[el.id] = (el.type === 'radio' || el.type === 'checkbox') ? el.checked : el.value;
@@ -1173,6 +1174,11 @@ function applyFormData(data) {
     if (el.type === 'radio' || el.type === 'checkbox') el.checked = val;
     else el.value = val;
   });
+  receiptImages = (data.__receiptImages || []).map(dataUrl => ({ dataUrl, originalImg: null }));
+  receiptOriginalImg = null;
+  renderReceiptThumbs();
+  document.getElementById('receipt-manual-btn').style.display = 'none';
+  document.getElementById('receipt-clear-btn').style.display = receiptImages.length ? 'inline-flex' : 'none';
   updateTotal();
   refreshAllAccountDisplays();
 }
