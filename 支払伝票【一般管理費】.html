@@ -326,11 +326,6 @@
   body:not(.acc-mode) table.detail td[data-acc]::after {
     content: "";
     position: absolute; inset: 0;
-    background: repeating-linear-gradient(
-      45deg,
-      rgba(80,100,130,0.40) 0px, rgba(80,100,130,0.40) 2px,
-      rgba(190,205,220,0.55) 2px, rgba(190,205,220,0.55) 9px
-    );
     border-radius: 4px;
     pointer-events: none; z-index: 2;
   }
@@ -527,7 +522,7 @@
   <!-- 領収書スキャン -->
   <div class="card">
     <div class="card-header" style="display:flex; align-items:center; justify-content:space-between;">
-      <span>▌ 領収書（任意）</span>
+      <span>▌ 領収書（任意） <span style="color:#c0392b; font-weight:700; font-size:11px;">β版</span></span>
       <span style="font-size:11px; color:#778; font-weight:400;">撮影またはファイルを自動トリミングして添付</span>
     </div>
     <p style="margin:0 16px 8px; padding:8px 12px; background:#fff8e1; border-left:3px solid #f5a623; border-radius:4px; font-size:12px; color:#7a5a00;">
@@ -1127,6 +1122,20 @@ for (let i = 0; i < NUM_ROWS; i++) {
   tbody.appendChild(tr);
 }
 
+// ─── 発行日デフォルト値（未入力時は今日の日付） ────────────────
+function setDefaultIssueDate() {
+  const y = document.getElementById('issue_year');
+  const m = document.getElementById('issue_month');
+  const d = document.getElementById('issue_day');
+  if (!y.value && !m.value && !d.value) {
+    const now = new Date();
+    y.value = now.getFullYear();
+    m.value = now.getMonth() + 1;
+    d.value = now.getDate();
+  }
+}
+setDefaultIssueDate();
+
 // ─── 合計計算 ────────────────────────────────────────────────
 function updateTotal() {
   let sum = 0;
@@ -1142,6 +1151,7 @@ function updateTotal() {
 function clearForm() {
   if (!confirm('入力内容をすべてクリアしますか？')) return;
   document.querySelectorAll('input, select').forEach(el => { el.value = ''; });
+  setDefaultIssueDate();
   updateTotal();
   refreshAllAccountDisplays();
 }
