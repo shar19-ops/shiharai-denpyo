@@ -555,46 +555,46 @@
   <!-- 発行情報 -->
   <div class="card">
     <div class="card-header">▌ 発行情報</div>
-    <div class="date-row">
-      <span style="margin-top:18px; font-size:13px; color:#556;">発行日</span>
-      <div class="field"><label>年</label><input type="number" id="issue_year" style="width:72px;" placeholder="2025"></div>
-      <span class="sep">年</span>
-      <div class="field"><label>月</label><input type="number" id="issue_month" style="width:60px;" min="1" max="12" placeholder="1"></div>
-      <span class="sep">月</span>
-      <div class="field"><label>日</label><input type="number" id="issue_day" style="width:60px;" min="1" max="31" placeholder="1"></div>
-      <span class="sep">日</span>
-      <button type="button" class="btn-calendar" title="カレンダーから選択" onclick="openDatePicker('issue_year','issue_month','issue_day','date_picker_issue')">📅</button>
-      <input type="date" id="date_picker_issue" class="date-picker-hidden" onchange="applyDatePicker(this,'issue_year','issue_month','issue_day')">
-    </div>
-    <div class="field-grid field-grid-2" style="padding: 0 16px; align-items:end;">
-      <div class="field">
-        <label>収支CD</label>
-        <div data-acc><input type="text" id="balance_cd" placeholder="" readonly style="background:#f0f4f8; color:#445; width:100%;"></div>
+    <div style="display:flex; flex-wrap:wrap; align-items:end; gap:16px 20px; padding:16px;">
+      <div style="display:flex; align-items:center; gap:6px;">
+        <span style="margin-top:18px; font-size:13px; color:#556;">発行日</span>
+        <div class="field"><label>年</label><input type="number" id="issue_year" style="width:72px;" placeholder="2025"></div>
+        <span class="sep">年</span>
+        <div class="field"><label>月</label><input type="number" id="issue_month" style="width:60px;" min="1" max="12" placeholder="1"></div>
+        <span class="sep">月</span>
+        <div class="field"><label>日</label><input type="number" id="issue_day" style="width:60px;" min="1" max="31" placeholder="1"></div>
+        <span class="sep">日</span>
+        <button type="button" class="btn-calendar" title="カレンダーから選択" onclick="openDatePicker('issue_year','issue_month','issue_day','date_picker_issue')">📅</button>
+        <input type="date" id="date_picker_issue" class="date-picker-hidden" onchange="applyDatePicker(this,'issue_year','issue_month','issue_day')">
       </div>
-      <div class="field">
-        <label>収支項目名</label>
-        <div style="display:flex; gap:8px;">
-          <div data-acc style="flex:1;"><select id="balance_name" onchange="onBalanceNameChange()" style="width:100%;"></select></div>
-          <button type="button" class="btn-secondary" data-acc style="font-size:12px; padding:0 10px;" onclick="openKessanModal()">📋 項目管理</button>
-        </div>
-      </div>
-    </div>
-    <div class="field-grid field-grid-4" style="padding: 0 16px 16px;">
-      <div class="field">
+      <div class="field" style="flex:0 0 95px; margin-left:auto;">
         <label>部</label>
         <input type="text" id="dept" placeholder="">
       </div>
-      <div class="field">
+      <div class="field" style="flex:0 0 95px;">
         <label>課</label>
         <input type="text" id="section" placeholder="">
       </div>
-      <div class="field">
-        <label>社員CD</label>
-        <input type="text" id="employee_cd" placeholder="例：1234567" maxlength="7">
+    </div>
+    <div style="display:flex; flex-wrap:wrap; align-items:start; gap:16px 20px; padding:0 16px 16px;">
+      <div class="field" style="flex:0 0 80px;">
+        <label>収支CD</label>
+        <div data-acc><input type="text" id="balance_cd" placeholder="" readonly style="background:#f0f4f8; color:#445; width:100%;"></div>
       </div>
-      <div class="field">
+      <div class="field" style="flex:1 1 200px; min-width:180px;">
+        <label>収支項目名</label>
+        <div style="display:flex; gap:6px;">
+          <div data-acc style="flex:1;"><select id="balance_name" onchange="onBalanceNameChange()" style="width:100%;"></select></div>
+          <button type="button" class="btn-secondary" data-acc style="font-size:12px; padding:0 8px;" title="項目管理" onclick="openKessanModal()">📋</button>
+        </div>
+      </div>
+      <div class="field" style="flex:0 0 120px;">
+        <label>社員CD</label>
+        <input type="text" id="employee_cd" placeholder="例：1234567" maxlength="7" style="width:100%;">
+      </div>
+      <div class="field" style="flex:0 0 300px;">
         <label>発行者（苗字 名前の間にスペース）</label>
-        <input type="text" id="issuer" placeholder="例：佐藤 太郎">
+        <input type="text" id="issuer" placeholder="例：佐藤 太郎" style="width:100%;">
         <span id="issuer-name-error" style="display:none; font-size:11px; color:#c0392b;">苗字と名前の間にスペースを入力してください</span>
       </div>
     </div>
