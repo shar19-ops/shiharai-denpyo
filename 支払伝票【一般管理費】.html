@@ -465,28 +465,28 @@
           <option value="北関東支店">北関東支店</option>
         </select>
       </div>
-      <div class="field" style="display:flex; flex-direction:row; gap:8px; align-items:flex-end;">
-        <div class="field" style="flex:0 0 90px;">
-          <label>事業所CD</label>
-          <input type="text" id="office_code" placeholder="" readonly style="background:#f0f4f8; color:#445;">
-        </div>
-        <div class="field" style="flex:1;" data-acc>
-          <label>伝票番号</label>
-          <input type="text" id="voucher_no" placeholder="">
-        </div>
+      <div class="field">
+        <label>事業所CD</label>
+        <input type="text" id="office_code" placeholder="" readonly style="background:#f0f4f8; color:#445;">
       </div>
     </div>
 
-    <div class="date-row">
-      <span style="margin-top:18px; font-size:13px; color:#556;">日付</span>
-      <div class="field" data-acc><label>年</label><input type="number" id="date_year" style="width:72px;" placeholder="2025"></div>
-      <span class="sep">年</span>
-      <div class="field" data-acc><label>月</label><input type="number" id="date_month" style="width:60px;" min="1" max="12" placeholder="1"></div>
-      <span class="sep">月</span>
-      <div class="field" data-acc><label>日</label><input type="number" id="date_day" style="width:60px;" min="1" max="31" placeholder="1"></div>
-      <span class="sep">日</span>
-      <button type="button" class="btn-calendar" data-acc title="カレンダーから選択" onclick="openDatePicker('date_year','date_month','date_day','date_picker_main')">📅</button>
-      <input type="date" id="date_picker_main" class="date-picker-hidden" onchange="applyDatePicker(this,'date_year','date_month','date_day')">
+    <div class="field-grid field-grid-2" style="padding-top:0; align-items:end;">
+      <div style="display:flex; align-items:center; gap:6px;">
+        <span style="margin-top:18px; font-size:13px; color:#556;">日付</span>
+        <div class="field"><label>年</label><div data-acc><input type="number" id="date_year" style="width:72px;" placeholder="2025"></div></div>
+        <span class="sep">年</span>
+        <div class="field"><label>月</label><div data-acc><input type="number" id="date_month" style="width:60px;" min="1" max="12" placeholder="1"></div></div>
+        <span class="sep">月</span>
+        <div class="field"><label>日</label><div data-acc><input type="number" id="date_day" style="width:60px;" min="1" max="31" placeholder="1"></div></div>
+        <span class="sep">日</span>
+        <button type="button" class="btn-calendar" data-acc title="カレンダーから選択" onclick="openDatePicker('date_year','date_month','date_day','date_picker_main')">📅</button>
+        <input type="date" id="date_picker_main" class="date-picker-hidden" onchange="applyDatePicker(this,'date_year','date_month','date_day')">
+      </div>
+      <div class="field">
+        <label>伝票番号</label>
+        <div data-acc><input type="text" id="voucher_no" placeholder="" style="width:100%;"></div>
+      </div>
     </div>
   </div>
 
@@ -570,9 +570,9 @@
       <input type="date" id="date_picker_issue" class="date-picker-hidden" onchange="applyDatePicker(this,'issue_year','issue_month','issue_day')">
     </div>
     <div class="field-grid field-grid-2" style="padding: 0 16px; align-items:end;">
-      <div class="field" data-acc>
+      <div class="field">
         <label>収支CD</label>
-        <input type="text" id="balance_cd" placeholder="" readonly style="background:#f0f4f8; color:#445;">
+        <div data-acc><input type="text" id="balance_cd" placeholder="" readonly style="background:#f0f4f8; color:#445; width:100%;"></div>
       </div>
       <div class="field">
         <label>収支項目名</label>
@@ -584,6 +584,14 @@
     </div>
     <div class="field-grid field-grid-4" style="padding: 0 16px 16px;">
       <div class="field">
+        <label>部</label>
+        <input type="text" id="dept" placeholder="">
+      </div>
+      <div class="field">
+        <label>課</label>
+        <input type="text" id="section" placeholder="">
+      </div>
+      <div class="field">
         <label>社員CD</label>
         <input type="text" id="employee_cd" placeholder="例：1234567" maxlength="7">
       </div>
@@ -591,14 +599,6 @@
         <label>発行者（苗字 名前の間にスペース）</label>
         <input type="text" id="issuer" placeholder="例：佐藤 太郎">
         <span id="issuer-name-error" style="display:none; font-size:11px; color:#c0392b;">苗字と名前の間にスペースを入力してください</span>
-      </div>
-      <div class="field">
-        <label>部</label>
-        <input type="text" id="dept" placeholder="">
-      </div>
-      <div class="field">
-        <label>課</label>
-        <input type="text" id="section" placeholder="">
       </div>
     </div>
     <div style="padding:0 16px 16px; display:flex; align-items:center; gap:12px; border-top:1px solid #e0e8f0; margin:4px 16px 0; padding-top:14px;">
