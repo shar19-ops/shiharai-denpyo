@@ -1608,19 +1608,32 @@ function ensureOpenCV() {
     if (typeof cv !== 'undefined' && cv && typeof cv.Mat === 'function') {
       resolve(cv); return;
     }
+    let check;
+    // スクリプトの読み込み自体が固まる(通信環境が悪い等)場合もあるため、
+    // onload待ちではなくPromise生成時点からタイムアウトを開始する。
+    const timeout = setTimeout(() => {
+      clearInterval(check);
+      reject(new Error('OpenCVの読み込みがタイムアウトしました(通信環境をご確認ください)'));
+    }, 30000);
     const script = document.createElement('script');
     script.src = 'https://docs.opencv.org/4.8.0/opencv.js';
     script.onload = () => {
-      const check = setInterval(() => {
+      check = setInterval(() => {
         if (typeof cv !== 'undefined' && cv && typeof cv.Mat === 'function') {
           clearInterval(check);
+          clearTimeout(timeout);
           resolve(cv);
         }
       }, 100);
-      setTimeout(() => { clearInterval(check); reject(new Error('OpenCV初期化タイムアウト')); }, 30000);
     };
-    script.onerror = () => reject(new Error('OpenCV.jsの読み込みに失敗しました'));
+    script.onerror = () => {
+      clearTimeout(timeout);
+      reject(new Error('OpenCV.jsの読み込みに失敗しました'));
+    };
     document.head.appendChild(script);
+  }).catch(err => {
+    openCVPromise = null; // 失敗時は次回の読み込みでリトライできるようキャッシュを破棄
+    throw err;
   });
   return openCVPromise;
 }
