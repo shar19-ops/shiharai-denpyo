@@ -548,6 +548,16 @@
     <input type="file" id="receipt-camera-input" accept="image/*" capture="environment" style="display:none;" onchange="handleReceiptInput(this)">
   </div>
 
+  <!-- 添付ファイル -->
+  <div class="card">
+    <div class="card-header">▌ 添付ファイル</div>
+    <div style="padding:14px 16px;">
+      <input type="file" id="attached-file-input" accept="application/pdf,.pdf" multiple style="display:none" onchange="onAttachedFilesSelected(this)">
+      <button type="button" class="btn-scan" onclick="document.getElementById('attached-file-input').click()">📎 ファイルを添付</button>
+      <div id="attached-file-list"></div>
+    </div>
+  </div>
+
   <!-- 発行情報 -->
   <div class="card">
     <div class="card-header">▌ 発行情報</div>
@@ -1596,6 +1606,53 @@ async function generatePDF(mode = 'download') {
     statusEl.textContent = 'エラー: ' + err.message;
     statusEl.className = 'status-err';
   }
+}
+
+// ─── 添付ファイル ────────────────────────────────────────────
+let attachedFiles = []; // [{ name, dataUrl }]
+
+function onAttachedFilesSelected(input) {
+  const files = Array.from(input.files || []);
+  input.value = '';
+  files.forEach(file => {
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    if (!isPdf) {
+      alert(`「${file.name}」はPDFファイルではないためスキップしました。`);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      attachedFiles.push({ name: file.name, dataUrl: reader.result });
+      renderAttachedFileList();
+    };
+    reader.onerror = () => alert(`「${file.name}」の読み込みに失敗しました。`);
+    reader.readAsDataURL(file);
+  });
+}
+
+function removeAttachedFileAt(idx) {
+  attachedFiles.splice(idx, 1);
+  renderAttachedFileList();
+}
+
+function viewAttachedFile(idx) {
+  const f = attachedFiles[idx];
+  if (!f) return;
+  const bytes = Uint8Array.from(atob(f.dataUrl.split(',')[1]), c => c.charCodeAt(0));
+  const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+  const win = window.open(url, '_blank');
+  if (!win) alert('ポップアップがブロックされました。ブラウザの設定を確認してください。');
+}
+
+function renderAttachedFileList() {
+  const container = document.getElementById('attached-file-list');
+  container.innerHTML = attachedFiles.map((f, idx) => `
+    <div style="display:flex; align-items:center; gap:8px; padding:6px 2px; border-bottom:1px solid #eee; font-size:13px;">
+      <span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">📄 ${f.name}</span>
+      <button type="button" class="btn-scan" onclick="viewAttachedFile(${idx})">👁 表示</button>
+      <button type="button" class="btn-scan btn-scan-clear" onclick="removeAttachedFileAt(${idx})">🗑 削除</button>
+    </div>
+  `).join('');
 }
 
 // ─── 領収書スキャン（v3新機能） ────────────────────────────────
