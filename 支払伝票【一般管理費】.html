@@ -1163,6 +1163,8 @@ function clearForm() {
   if (!confirm('入力内容をすべてクリアしますか？')) return;
   document.querySelectorAll('input, select').forEach(el => { el.value = ''; });
   clearReceipt();
+  attachedFiles = [];
+  renderAttachedFileList();
   setDefaultIssueDate();
   updateTotal();
   refreshAllAccountDisplays();
@@ -1170,7 +1172,7 @@ function clearForm() {
 
 // ─── 入力データの保存・読み込み ────────────────────────────
 function collectFormData() {
-  const data = { __receiptImages: receiptImages.map(r => r.dataUrl) };
+  const data = { __receiptImages: receiptImages.map(r => r.dataUrl), __attachedFiles: attachedFiles };
   document.querySelectorAll('.container input, .container select').forEach(el => {
     if (!el.id) return;
     data[el.id] = (el.type === 'radio' || el.type === 'checkbox') ? el.checked : el.value;
@@ -1190,6 +1192,8 @@ function applyFormData(data) {
   renderReceiptThumbs();
   document.getElementById('receipt-manual-btn').style.display = 'none';
   document.getElementById('receipt-clear-btn').style.display = receiptImages.length ? 'inline-flex' : 'none';
+  attachedFiles = data.__attachedFiles || [];
+  renderAttachedFileList();
   updateTotal();
   refreshAllAccountDisplays();
 }
@@ -1584,11 +1588,27 @@ async function generatePDF(mode = 'download') {
       }
     }
 
+    // ─ 添付ファイル: PDFページを結合 ─
+    const attachMergeWarnings = [];
+    for (const f of attachedFiles) {
+      try {
+        const attachBytes = Uint8Array.from(atob(f.dataUrl.split(',')[1]), c => c.charCodeAt(0));
+        const attachDoc = await PDFDocument.load(attachBytes);
+        const copiedPages = await a4Doc.copyPages(attachDoc, attachDoc.getPageIndices());
+        copiedPages.forEach(page => a4Doc.addPage(page));
+      } catch (e) {
+        attachMergeWarnings.push(f.name);
+      }
+    }
+    const attachWarningMsg = attachMergeWarnings.length
+      ? `（添付ファイルの結合に失敗: ${attachMergeWarnings.join(', ')}）`
+      : '';
+
         const outBytes = await a4Doc.save();
     if (mode === 'print') {
       await printViaCanvas(outBytes);
-      statusEl.textContent = '印刷ダイアログを開きました';
-      statusEl.className = 'status-ok';
+      statusEl.textContent = '印刷ダイアログを開きました' + attachWarningMsg;
+      statusEl.className = attachWarningMsg ? 'status-err' : 'status-ok';
     } else {
       const blob = new Blob([outBytes], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
@@ -1598,8 +1618,8 @@ async function generatePDF(mode = 'download') {
       a.download = `一般管理費支払伝票_${dateStr}.pdf`;
       a.click();
       URL.revokeObjectURL(url);
-      statusEl.textContent = 'PDF出力完了！';
-      statusEl.className = 'status-ok';
+      statusEl.textContent = 'PDF出力完了！' + attachWarningMsg;
+      statusEl.className = attachWarningMsg ? 'status-err' : 'status-ok';
     }
   } catch (err) {
     console.error(err);
