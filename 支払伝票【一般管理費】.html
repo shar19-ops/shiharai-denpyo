@@ -639,10 +639,32 @@
     <button class="btn-secondary" onclick="loadData()">📂 読み込む</button>
     <button class="btn-secondary" onclick="saveData()">💾 保存</button>
     <button class="btn-secondary" onclick="clearForm()">クリア</button>
-    <button class="btn-primary" onclick="generatePDF('print')">🖨 印刷 / PDF出力</button>
+    <button class="btn-primary" onclick="printPDF()">🖨 印刷 / PDF出力</button>
   </div>
 
 </div><!-- /container -->
+
+<!-- 控え選択モーダル -->
+<div id="export-modal" class="modal-overlay" style="display:none">
+  <div class="modal-box">
+    <h2 id="export-modal-title">📄 PDF出力</h2>
+    <p>控え（同じ内容をA4に上下2面で出力）を付けますか？</p>
+    <div style="display:flex; flex-direction:column; gap:10px;">
+      <label style="display:flex; align-items:center; gap:8px; font-size:14px; cursor:pointer;">
+        <input type="radio" name="export-copy" id="export-copy-no" value="no" checked style="width:auto;">
+        控え なし（A5サイズをA4に1面出力）
+      </label>
+      <label style="display:flex; align-items:center; gap:8px; font-size:14px; cursor:pointer;">
+        <input type="radio" name="export-copy" id="export-copy-yes" value="yes" style="width:auto;">
+        控え あり（同じ内容をA4に上下2面出力）
+      </label>
+    </div>
+    <div class="modal-btn-row">
+      <button class="btn-cancel" onclick="closeExportModal()">キャンセル</button>
+      <button class="btn-login" id="export-modal-confirm-btn" onclick="confirmExport()">PDF生成</button>
+    </div>
+  </div>
+</div>
 
 <!-- 収支項目管理モーダル -->
 <div id="kessan-modal" class="modal-overlay" style="display:none">
@@ -1246,6 +1268,28 @@ async function loadData() {
   }
 }
 
+// ─── 控え選択モーダル ────────────────────────────────────────
+let pendingExportMode = 'download';
+function openExportModal(mode) {
+  pendingExportMode = mode || 'download';
+  document.getElementById('export-modal-title').textContent = pendingExportMode === 'print' ? '🖨 印刷' : '📄 PDF出力';
+  document.getElementById('export-modal-confirm-btn').textContent = pendingExportMode === 'print' ? '印刷' : 'PDF生成';
+  document.getElementById('export-copy-no').checked = true;
+  document.getElementById('export-modal').style.display = 'flex';
+}
+function closeExportModal() {
+  document.getElementById('export-modal').style.display = 'none';
+}
+function confirmExport() {
+  const withCopy = document.getElementById('export-copy-yes').checked;
+  closeExportModal();
+  generatePDF(withCopy, pendingExportMode);
+}
+
+// ─── 印刷（PDFをダウンロードせず、その場で印刷ダイアログを開く） ──
+function printPDF() {
+  openExportModal('print');
+}
 // Chrome内蔵のPDFビューア（iframeにPDFを読み込む方式）はwindow.print()を
 // 呼んでも反応しないことがあるため、PDFを画像化してページ自体を印刷する。
 let pdfjsWorkerConfigured = false;
@@ -1271,7 +1315,7 @@ async function printViaCanvas(pdfBytes) {
 }
 
 // ─── PDF生成 ─────────────────────────────────────────────────
-async function generatePDF(mode = 'download') {
+async function generatePDF(withCopy, mode = 'download') {
   const statusEl = document.getElementById('status');
   statusEl.textContent = 'PDFを生成中...';
   statusEl.className = '';
@@ -1518,21 +1562,26 @@ async function generatePDF(mode = 'download') {
       }
     };
 
-    // A4上半分に伝票を描画
-    // テンプレートは上端ぎりぎり(約3.7mm)まで印字があり、プリンタの印刷不可領域で事業所名の上部が欠けるため、
-    // 伝票全体を縮小して上に余白を取り、左右中央に配置する（下端は切取り線より上に収まる）
+    // A4上半分に伝票、控えありなら下半分にも同じ伝票を描画（控えなしなら下半分は1枚目の領収書）
+    // テンプレートは用紙端ぎりぎり(約4mm)まで印字があり、プリンタの印刷不可領域で上下端(事業所名等)が欠けるため、
+    // 伝票を縮小して左右中央に配置し、上の伝票は用紙上端から・下の伝票は用紙下端から余白を取る（切取り線とは重ならない）
+    // 下端はプリンタの印刷不可領域が大きいことが多いため、下の伝票は切取り線側の空きを詰めて下端の余白を広めに取る
     const slotY = A4_H - A5_H;
     const SLIP_SCALE = 0.97;
-    const SLIP_TOP_MARGIN = 9; // pt（約3.2mm）
+    const SLIP_TOP_MARGIN = 9;     // pt（約3.2mm）上の伝票の上端余白
+    const SLIP_BOTTOM_MARGIN = 12; // pt（約4.2mm）下の伝票の下端余白
     const slipTx = (A4_W - A5_W * SLIP_SCALE) / 2;
-    const slipTy = A4_H - SLIP_TOP_MARGIN - A4_H * SLIP_SCALE;
-    a4Page.pushOperators(
-      PDFLib.pushGraphicsState(),
-      PDFLib.concatTransformationMatrix(SLIP_SCALE, 0, 0, SLIP_SCALE, slipTx, slipTy)
-    );
-    a4Page.drawPage(templatePage, { x: 0, y: slotY, width: A5_W, height: A5_H });
-    drawAt(slotY);
-    a4Page.pushOperators(PDFLib.popGraphicsState());
+    const slipTy = (yOffset) => yOffset > 0 ? A4_H - SLIP_TOP_MARGIN - A4_H * SLIP_SCALE : SLIP_BOTTOM_MARGIN;
+    const slots = withCopy ? [slotY, 0] : [slotY];
+    for (const yOffset of slots) {
+      a4Page.pushOperators(
+        PDFLib.pushGraphicsState(),
+        PDFLib.concatTransformationMatrix(SLIP_SCALE, 0, 0, SLIP_SCALE, slipTx, slipTy(yOffset))
+      );
+      a4Page.drawPage(templatePage, { x: 0, y: yOffset, width: A5_W, height: A5_H });
+      drawAt(yOffset);
+      a4Page.pushOperators(PDFLib.popGraphicsState());
+    }
 
     // 中央に切取り線を描画
     const cutY = slotY;
@@ -1556,8 +1605,9 @@ async function generatePDF(mode = 'download') {
       cx = ex + dashGap;
     }
 
-    // A4下半分に1枚目の領収書を描画
-    if (receiptImages.length > 0) {
+    // A4下半分に1枚目の領収書を描画（控えありのときは下半分が控えなので、領収書はすべて別ページ）
+    const gridStart = withCopy ? 0 : 1;
+    if (!withCopy && receiptImages.length > 0) {
       const r0 = receiptImages[0].dataUrl;
       const isJpeg0 = r0.startsWith('data:image/jpeg');
       const rcptBytes0 = Uint8Array.from(atob(r0.split(',')[1]), c => c.charCodeAt(0));
@@ -1569,14 +1619,14 @@ async function generatePDF(mode = 'download') {
         width: embImg0.width*sc0, height: embImg0.height*sc0
       });
     }
-    // 2枚目以降: A5ページに2×2グリッドでまとめて出力
-    if (receiptImages.length > 1) {
+    // 2枚目以降（控えありなら1枚目から）: A5ページに2×2グリッドでまとめて出力
+    if (receiptImages.length > gridStart) {
       const A5W = 420, A5H = 595;
       const marg = 15, gap = 8, cols = 2, rows = 2;
       const cellW = (A5W - 2*marg - (cols-1)*gap) / cols;
       const cellH = (A5H - 2*marg - (rows-1)*gap) / rows;
       const extraImgs = [];
-      for (let ri = 1; ri < receiptImages.length; ri++) {
+      for (let ri = gridStart; ri < receiptImages.length; ri++) {
         const rUrl = receiptImages[ri].dataUrl;
         const isJp = rUrl.startsWith('data:image/jpeg');
         const bytes = Uint8Array.from(atob(rUrl.split(',')[1]), c => c.charCodeAt(0));
@@ -2259,6 +2309,9 @@ document.getElementById('acc-modal').addEventListener('click', function(e) {
   if (e.target === this) closeAccModal();
 });
 
+document.getElementById('export-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeExportModal();
+});
 document.getElementById('account-modal').addEventListener('click', function(e) {
   if (e.target === this) closeAccountModal();
 });
