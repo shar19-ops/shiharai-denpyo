@@ -1519,9 +1519,20 @@ async function generatePDF(mode = 'download') {
     };
 
     // A4上半分に伝票を描画
+    // テンプレートは上端ぎりぎり(約3.7mm)まで印字があり、プリンタの印刷不可領域で事業所名の上部が欠けるため、
+    // 伝票全体を縮小して上に余白を取り、左右中央に配置する（下端は切取り線より上に収まる）
     const slotY = A4_H - A5_H;
+    const SLIP_SCALE = 0.95;
+    const SLIP_TOP_MARGIN = 17; // pt（約6mm）
+    const slipTx = (A4_W - A5_W * SLIP_SCALE) / 2;
+    const slipTy = A4_H - SLIP_TOP_MARGIN - A4_H * SLIP_SCALE;
+    a4Page.pushOperators(
+      PDFLib.pushGraphicsState(),
+      PDFLib.concatTransformationMatrix(SLIP_SCALE, 0, 0, SLIP_SCALE, slipTx, slipTy)
+    );
     a4Page.drawPage(templatePage, { x: 0, y: slotY, width: A5_W, height: A5_H });
     drawAt(slotY);
+    a4Page.pushOperators(PDFLib.popGraphicsState());
 
     // 中央に切取り線を描画
     const cutY = slotY;
