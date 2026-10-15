@@ -1522,8 +1522,8 @@ async function generatePDF(mode = 'download') {
     // テンプレートは上端ぎりぎり(約3.7mm)まで印字があり、プリンタの印刷不可領域で事業所名の上部が欠けるため、
     // 伝票全体を縮小して上に余白を取り、左右中央に配置する（下端は切取り線より上に収まる）
     const slotY = A4_H - A5_H;
-    const SLIP_SCALE = 0.95;
-    const SLIP_TOP_MARGIN = 17; // pt（約6mm）
+    const SLIP_SCALE = 0.97;
+    const SLIP_TOP_MARGIN = 9; // pt（約3.2mm）
     const slipTx = (A4_W - A5_W * SLIP_SCALE) / 2;
     const slipTy = A4_H - SLIP_TOP_MARGIN - A4_H * SLIP_SCALE;
     a4Page.pushOperators(
