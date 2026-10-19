@@ -1220,9 +1220,25 @@ function applyFormData(data) {
   refreshAllAccountDisplays();
 }
 
+// 保存・PDF出力時のファイル名候補: 支払伝票_一般_発行日(YYYYMMDD)_起票者
+// 発行日が未入力なら今日の日付、起票者(発行者)が未入力なら省略。ファイル名に使えない文字と空白は除く
+function buildFileBaseName() {
+  const y = v('issue_year'), m = v('issue_month'), d = v('issue_day');
+  const pad2 = (n) => String(n).padStart(2, '0');
+  let date;
+  if (y && m && d) {
+    date = y + pad2(m) + pad2(d);
+  } else {
+    const t = new Date();
+    date = t.getFullYear() + pad2(t.getMonth() + 1) + pad2(t.getDate());
+  }
+  const issuer = v('issuer').replace(/[\s　]+/g, '').replace(/[\\/:*?"<>|]/g, '');
+  return ['支払伝票', '一般', date, issuer].filter(Boolean).join('_');
+}
+
 async function saveData() {
   const json = JSON.stringify(collectFormData(), null, 2);
-  const filename = `一般管理費支払伝票_下書き_${new Date().toISOString().slice(0, 10)}.json`;
+  const filename = `${buildFileBaseName()}.json`;
   try {
     if (window.showSaveFilePicker) {
       const handle = await window.showSaveFilePicker({
@@ -1293,7 +1309,7 @@ function printPDF() {
 // Chrome内蔵のPDFビューア（iframeにPDFを読み込む方式）はwindow.print()を
 // 呼んでも反応しないことがあるため、PDFを画像化してページ自体を印刷する。
 let pdfjsWorkerConfigured = false;
-async function printViaCanvas(pdfBytes) {
+async function printViaCanvas(pdfBytes, title) {
   if (!pdfjsWorkerConfigured) {
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@3.11.174/legacy/build/pdf.worker.min.js';
     pdfjsWorkerConfigured = true;
@@ -1310,6 +1326,12 @@ async function printViaCanvas(pdfBytes) {
     canvas.height = viewport.height;
     await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
     printArea.appendChild(canvas);
+  }
+  // 印刷ダイアログの「PDFに保存」はページのタイトルをファイル名の候補にするため、印刷中だけ差し替える
+  const prevTitle = document.title;
+  if (title) {
+    document.title = title;
+    window.addEventListener('afterprint', () => { document.title = prevTitle; }, { once: true });
   }
   window.print();
 }
@@ -1667,7 +1689,7 @@ async function generatePDF(withCopy, mode = 'download') {
 
         const outBytes = await a4Doc.save();
     if (mode === 'print') {
-      await printViaCanvas(outBytes);
+      await printViaCanvas(outBytes, buildFileBaseName());
       statusEl.textContent = '印刷ダイアログを開きました' + attachWarningMsg;
       statusEl.className = attachWarningMsg ? 'status-err' : 'status-ok';
     } else {
@@ -1675,8 +1697,7 @@ async function generatePDF(withCopy, mode = 'download') {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      const dateStr = [v('date_year'), v('date_month'), v('date_day')].filter(Boolean).join('-') || 'output';
-      a.download = `一般管理費支払伝票_${dateStr}.pdf`;
+      a.download = `${buildFileBaseName()}.pdf`;
       a.click();
       URL.revokeObjectURL(url);
       statusEl.textContent = 'PDF出力完了！' + attachWarningMsg;
