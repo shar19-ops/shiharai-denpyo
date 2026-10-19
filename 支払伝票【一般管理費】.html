@@ -1220,20 +1220,21 @@ function applyFormData(data) {
   refreshAllAccountDisplays();
 }
 
-// 保存・PDF出力時のファイル名候補: 支払伝票_一般_発行日(YYYYMMDD)_起票者
-// 発行日が未入力なら今日の日付、起票者(発行者)が未入力なら省略。ファイル名に使えない文字と空白は除く
+// 保存・PDF出力時のファイル名候補: 支払伝票_一般_発行日(YYMMDD)_起票者の苗字
+// 発行日が未入力なら今日の日付。苗字は発行者欄の空白より前（空白がなければ全体）、未入力なら省略。
+// ファイル名に使えない文字は除く
 function buildFileBaseName() {
   const y = v('issue_year'), m = v('issue_month'), d = v('issue_day');
   const pad2 = (n) => String(n).padStart(2, '0');
   let date;
   if (y && m && d) {
-    date = y + pad2(m) + pad2(d);
+    date = pad2(Number(y) % 100) + pad2(m) + pad2(d);
   } else {
     const t = new Date();
-    date = t.getFullYear() + pad2(t.getMonth() + 1) + pad2(t.getDate());
+    date = pad2(t.getFullYear() % 100) + pad2(t.getMonth() + 1) + pad2(t.getDate());
   }
-  const issuer = v('issuer').replace(/[\s　]+/g, '').replace(/[\\/:*?"<>|]/g, '');
-  return ['支払伝票', '一般', date, issuer].filter(Boolean).join('_');
+  const sei = (v('issuer').split(/[\s　]+/).filter(Boolean)[0] || '').replace(/[\\/:*?"<>|]/g, '');
+  return ['支払伝票', '一般', date, sei].filter(Boolean).join('_');
 }
 
 async function saveData() {
