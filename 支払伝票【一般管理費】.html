@@ -1344,7 +1344,7 @@ async function printViaCanvas(pdfBytes, title) {
   const pdf = await pdfjsLib.getDocument({ data: pdfBytes }).promise;
   const printArea = document.getElementById('print-area');
   printArea.innerHTML = '';
-  const scale = 2; // 約144dpi相当
+  const scale = 300 / 72; // 300dpi相当（144dpiでは印刷がぼやけたため）
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
     const viewport = page.getViewport({ scale });
