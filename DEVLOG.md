@@ -8,9 +8,8 @@
 
 対象ディレクトリ: `支払伝票PJ\一般管理費支払伝票アプリ_v3\`
 GitHubリポジトリ: https://github.com/shar19-ops/shiharai-denpyo
-公開URL（GitHub Pages / main ルート）: https://shar19-ops.github.io/shiharai-denpyo/支払伝票【一般管理費】.html
-（`index.html` が無いため、ルート `https://shar19-ops.github.io/shiharai-denpyo/` は 404。2026-11-24 時点）
-対象ファイル: `支払伝票【一般管理費】.html`（単一HTMLで完結）
+公開URL（GitHub Pages / main ルート）: https://shar19-ops.github.io/shiharai-denpyo/
+対象ファイル: `支払伝票【一般管理費】.html`（単一HTMLで完結。`index.html` はリダイレクトのみ）
 派生アプリ: `teiki-slip-ippan-app`（一般管理費・定期券用）
 姉妹アプリ: `payment-slip-app`（未成工事用。多くの変更を両方に同時に入れている）
 
@@ -94,3 +93,8 @@ GitHubリポジトリ: https://github.com/shar19-ops/shiharai-denpyo
 ## 2026-11-24: 添付ファイル欄に注意書き（PR #10）
 
 - 「📎 ファイルを添付」ボタンの上に「⚠ 領収書のスキャンデータは入れないこと。必ず原本を提出するように」を赤字・太字で表示。画面のみで、PDF出力・印刷には出ない。
+
+## 2026-11-24: Pages のルートを開けるように index.html を追加
+
+- `index.html` が無く、公開URLのルート `https://shar19-ops.github.io/shiharai-denpyo/` が 404 だった（ファイル名つきのURLなら開けていた）。
+- `支払伝票【一般管理費】.html` へ移動するだけの `index.html` を追加した（payment-slip-app が 2026-07-19 に入れたものと同じ作り）。
