@@ -588,6 +588,9 @@
   <div class="card">
     <div class="card-header">▌ 添付ファイル</div>
     <div style="padding:14px 16px;">
+      <p class="attach-receipt-notice" style="margin:0 0 12px; padding:8px 12px; background:#fdecea; border-left:4px solid #c0392b; border-radius:4px; font-size:14px; font-weight:700; color:#c0392b;">
+        ⚠ 領収書のスキャンデータは入れないこと。必ず原本を提出するように
+      </p>
       <input type="file" id="attached-file-input" accept="application/pdf,.pdf" multiple style="display:none" onchange="onAttachedFilesSelected(this)">
       <button type="button" class="btn-scan" onclick="document.getElementById('attached-file-input').click()">📎 ファイルを添付</button>
       <div id="attached-file-list"></div>
