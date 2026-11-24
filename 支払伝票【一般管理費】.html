@@ -1211,7 +1211,12 @@ function updateTotal() {
 // ─── フォームクリア ──────────────────────────────────────────
 function clearForm() {
   if (!confirm('入力内容をすべてクリアしますか？')) return;
-  document.querySelectorAll('input, select, textarea').forEach(el => { el.value = ''; });
+  document.querySelectorAll('input, select, textarea').forEach(el => {
+    // ラジオ・チェックボックスは value を消すと選択肢の値（デート印の red/black）が失われ、色が朱のままになるため触れない
+    if (el.type === 'radio' || el.type === 'checkbox') return;
+    el.value = '';
+  });
+  onIssuerTitleChange(); // 役職が空になるのでデート印の色を黒に戻し、プレビューを描き直す
   clearReceipt();
   attachedFiles = [];
   renderAttachedFileList();
