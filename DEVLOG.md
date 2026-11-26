@@ -98,3 +98,10 @@ GitHubリポジトリ: https://github.com/shar19-ops/shiharai-denpyo
 
 - `index.html` が無く、公開URLのルート `https://shar19-ops.github.io/shiharai-denpyo/` が 404 だった（ファイル名つきのURLなら開けていた）。
 - `支払伝票【一般管理費】.html` へ移動するだけの `index.html` を追加した（payment-slip-app が 2026-07-19 に入れたものと同じ作り）。
+
+## 2026-11-26: 入力画面の金額欄を桁区切り（カンマ）表示に
+
+- ユーザー指定（振替伝票 transfer-slip-app #9 と同じ仕組みを他の伝票にも）。金額欄を `type="number"`（カンマを表示できない）から `type="text" inputmode="numeric"`・`class="amount-input"` に変え、入力しながらカンマを付ける。カーソルは「左にある数字の数」で位置を戻す。全角数字・「¥」「円」付きの貼り付けも数字だけにする。金額欄は右寄せ。
+- 読むときは `amountOf()`、プログラムから入れるときは `setAmount()`。合計・PDFの金額をこれに置き換えた。PDFの金額は数字を1マスずつ描くので見た目は変わらない。
+- 保存JSONの金額はカンマなしの数字のまま（以前の保存ファイルと同じ形）。読み込み時にカンマを付ける（`formatAllAmountInputs()`）。
+- 確認（Playwright）: 入力・貼り付けのカンマ、合計、保存JSONがカンマなし、読み込み後のカンマ、生成したPDFの金額、金額欄が右寄せ。

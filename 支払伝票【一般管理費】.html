@@ -437,6 +437,8 @@
     background: #1a1a2e; border-radius: 6px; overflow: hidden; flex: 1; min-height: 180px;
   }
   #crop-canvas { touch-action: none; max-width: 100%; display: block; cursor: crosshair; }
+  /* 金額欄（桁区切り付きの文字の欄）は右寄せ */
+  input.amount-input { text-align: right; }
 </style>
 </head>
 <body>
@@ -1181,7 +1183,7 @@ for (let i = 0; i < NUM_ROWS; i++) {
     <td><input type="text" id="category_${i}" placeholder="" style="width:38px; text-align:center;" oninput="this.value = toHalfWidthAlnum(this.value)"></td>
     <td data-acc><select class="tax-select" id="expense_cd_${i}">${expenseCdOptionsHtml('')}</select></td>
     <td data-acc><input type="text" id="memo_cd_${i}" placeholder=""></td>
-    <td class="amount-cell"><input type="number" id="amount_${i}" placeholder="0" min="0" step="1" oninput="updateTotal()"></td>
+    <td class="amount-cell"><input type="text" inputmode="numeric" autocomplete="off" class="amount-input" id="amount_${i}" placeholder="0" oninput="updateTotal()"></td>
   `;
   tbody.appendChild(tr);
 }
@@ -1204,7 +1206,7 @@ setDefaultIssueDate();
 function updateTotal() {
   let sum = 0;
   for (let i = 0; i < NUM_ROWS; i++) {
-    const v = parseFloat(document.getElementById(`amount_${i}`).value) || 0;
+    const v = amountOf(`amount_${i}`);
     sum += v;
   }
   document.getElementById('total-display').textContent = '¥' + sum.toLocaleString('ja-JP');
@@ -1229,11 +1231,47 @@ function clearForm() {
 }
 
 // ─── 入力データの保存・読み込み ────────────────────────────
+// ─ 金額欄の桁区切り（振替伝票と同じ仕組み） ─
+// 金額欄（class="amount-input"）は文字の欄にして、入力しながらカンマを付ける。
+// 読むときは amountOf() で数字だけにする。保存JSONにはカンマなしの数字で入れる（以前の保存ファイルと互換）。
+function amountDigits(str) { return String(str ?? '').normalize('NFKC').replace(/[^0-9]/g, '').replace(/^0+(?=\d)/, ''); }
+function amountComma(digits) { return digits ? digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : ''; }
+function amountOf(elOrId) {
+  const el = typeof elOrId === 'string' ? document.getElementById(elOrId) : elOrId;
+  return Number(amountDigits(el && el.value)) || 0;
+}
+function isAmountInput(el) { return !!(el && el.classList && el.classList.contains('amount-input')); }
+// 値を入れるとき（プログラムから）もカンマ付きにする
+function setAmount(el, value) {
+  if (typeof el === 'string') el = document.getElementById(el);
+  if (el) el.value = amountComma(amountDigits(value));
+}
+// 入力中：カンマを付け直し、カーソルは「左にある数字の数」が同じ位置に戻す
+function reformatAmountInput(el) {
+  const before = el.value;
+  const caret = el.selectionStart ?? before.length;
+  const digitsLeft = amountDigits(before.slice(0, caret)).length;
+  const after = amountComma(amountDigits(before));
+  if (after === before) return;
+  el.value = after;
+  let pos = 0, seen = 0;
+  while (pos < after.length && seen < digitsLeft) { if (/\d/.test(after[pos])) seen++; pos++; }
+  try { el.setSelectionRange(pos, pos); } catch (e) {}
+}
+// 各欄の oninput（合計の計算など）より先にカンマを付け直す
+document.addEventListener('input', e => { if (isAmountInput(e.target)) reformatAmountInput(e.target); }, true);
+// 読み込み後などにカンマを付け直す（収支項目の金額は「￥」付きの表示を別に持つので除く）
+function formatAllAmountInputs() {
+  document.querySelectorAll('input.amount-input').forEach(el => { if (!/^kessan_amount_/.test(el.id)) setAmount(el, el.value); });
+}
+
 function collectFormData() {
   const data = { __receiptImages: receiptImages.map(r => r.dataUrl), __attachedFiles: attachedFiles };
   document.querySelectorAll('.container input, .container select, .container textarea').forEach(el => {
     if (!el.id) return;
-    data[el.id] = (el.type === 'radio' || el.type === 'checkbox') ? el.checked : el.value;
+    data[el.id] = (el.type === 'radio' || el.type === 'checkbox') ? el.checked : 
+      (isAmountInput(el) && !/^kessan_amount_/.test(el.id)) ? amountDigits(el.value) // 金額はカンマなしで保存（以前の保存ファイルと同じ形）
+      : el.value;
   });
   return data;
 }
@@ -1255,6 +1293,7 @@ function applyFormData(data) {
   updateTotal();
   refreshAllAccountDisplays();
   onOfficeChange(); // 事業所CDは事業所名から入れ直す（保存データ・テンプレートに残っている旧コード対策）
+  formatAllAmountInputs(); // 金額欄にカンマを付ける
 }
 
 // 保存・PDF出力時のファイル名候補: 支払伝票_一般_発行日(YYMMDD)_起票者の苗字
@@ -1565,7 +1604,7 @@ async function generatePDF(withCopy, mode = 'download') {
         drawInCellShrink(expenseCdLabel(gv(`expense_cd_${i}`)), COL_X.expense_cd.x, yTop, yBottom, COL_X.expense_cd.w);
         drawInCell(gv(`memo_cd_${i}`),    COL_X.memo_cd.x,    yTop, yBottom, COL_X.memo_cd.w);
 
-        const amt = parseInt(gv(`amount_${i}`)) || 0;
+        const amt = amountOf(`amount_${i}`);
         if (amt > 0) {
           const digits = String(amt).split('').reverse();
           for (let d = 0; d < Math.min(digits.length, AMOUNT_CELLS_X.length); d++) {
